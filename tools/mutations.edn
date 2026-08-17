@@ -1,0 +1,203 @@
+;; One mutation per invariant. `:find` must occur EXACTLY ONCE in `:file` —
+;; `tools/mutate.cljs` refuses otherwise, because a mutation that landed in a
+;; comment or in a second call site produces a red suite that proves nothing.
+;;
+;; Read the pair before trusting a red: the thing broken and the thing
+;; reported must be the same thing.
+[{:id :no-actuation
+  :invariant "the advisor may only propose"
+  :file "src/shiharai/governor.cljc"
+  :find "(gov/no-actuation {:effect effect}"
+  :replace "(gov/no-actuation {:effect :propose}"}
+
+ {:id :no-supplier
+  :invariant "the requesting supplier must be registered"
+  :file "src/shiharai/governor.cljc"
+  :find "(gov/missing-subject sup {:rule :no-supplier"
+  :replace "(gov/missing-subject (or sup {}) {:rule :no-supplier"}
+
+ {:id :unknown-payable
+  :invariant "a cited payable must be registered"
+  :file "src/shiharai/governor.cljc"
+  :find "(gov/unknown-scope pay {:applies? (boolean payable)"
+  :replace "(gov/unknown-scope pay {:applies? false"}
+
+ {:id :payable-wrong-supplier
+  :invariant "a payable must belong to the requesting supplier"
+  :file "src/shiharai/governor.cljc"
+  :find "(gov/scope-owner-mismatch pay {:supplier-id supplier-id}"
+  :replace "(gov/scope-owner-mismatch nil {:supplier-id supplier-id}"}
+
+ {:id :unknown-payable-amount
+  :invariant "an unknown amount is neither 0 nor unlimited"
+  :file "src/shiharai/governor.cljc"
+  :find "(and pay (not (int? (:payable/amount-minor pay))))"
+  :replace "(and pay false)"}
+
+ {:id :outstanding-defaults-to-zero
+  :invariant "the store refuses to turn an unknown amount into a number"
+  :file "src/shiharai/store.cljc"
+  :find "(when (int? amount)\n       (- amount (committed-minor"
+  :replace "(when true\n       (- (or amount 0) (committed-minor"}
+
+ {:id :invalid-amount
+  :invariant "a payment is a positive integer of minor units"
+  :file "src/shiharai/governor.cljc"
+  :find "(and payment (not (and (int? amount-minor) (pos? amount-minor))))"
+  :replace "(and payment false)"}
+
+ {:id :duplicate-payment
+  :invariant "a payable already covered may not be paid again"
+  :file "src/shiharai/governor.cljc"
+  :find "(and (int? out) (<= out 0))"
+  :replace "(and (int? out) (< out -1))"}
+
+ {:id :scheduled-consumes-balance
+  :invariant "a :scheduled payment consumes the balance, not only :authorised"
+  :file "src/shiharai/store.cljc"
+  :find "#{:scheduled :authorised})"
+  :replace "#{:authorised})"}
+
+ {:id :overpayment
+  :invariant "a payment may not exceed the outstanding balance"
+  :file "src/shiharai/governor.cljc"
+  :find "(> amount-minor out)"
+  :replace "(> amount-minor (* 2 out))"}
+
+ {:id :payment-id-reused
+  :invariant "a schedule may not reuse a committed payment id"
+  :file "src/shiharai/governor.cljc"
+  :find "(and (= :schedule-payment op) existing)"
+  :replace "(and (= :schedule-payment op) false)"}
+
+ {:id :release-of-unscheduled
+  :invariant "a release must cite a scheduled payment"
+  :file "src/shiharai/governor.cljc"
+  :find "(and releasing? (not= :scheduled (:payment/status existing)))"
+  :replace "(and releasing? false)"}
+
+ {:id :release-alters-payment
+  :invariant "a release may not change what the human is approving"
+  :file "src/shiharai/governor.cljc"
+  :find "(and releasing? (= :scheduled (:payment/status existing))"
+  :replace "(and releasing? false"}
+
+ {:id :currency-mismatch
+  :invariant "no cross-currency payment without an FX rate nobody has"
+  :file "src/shiharai/governor.cljc"
+  :find "(and pay payment (some? currency) (not= currency (:payable/currency pay)))"
+  :replace "(and pay payment (some? currency) false)"}
+
+ {:id :no-destination-account
+  :invariant "a payment needs a destination"
+  :file "src/shiharai/governor.cljc"
+  :find "(= :none (:destination/coverage dest))"
+  :replace "(= :nope (:destination/coverage dest))"}
+
+ {:id :invalid-iban
+  :invariant "an IBAN that fails ISO 13616 mod-97 is refused"
+  :file "src/shiharai/governor.cljc"
+  :find "(false? (:destination/valid? dest))"
+  :replace "(nil? (:destination/valid? dest))"}
+
+ {:id :iban-checksum
+  :invariant "kotoba.banking's mod-97 is the thing being consulted"
+  :file "src/shiharai/store.cljc"
+  :find "(boolean (bank/iban-valid? (:account/id account)))"
+  :replace "true"}
+
+ {:id :unknown-funding-account
+  :invariant "the funding account must be registered"
+  :file "src/shiharai/governor.cljc"
+  :find "(and payment from-account (nil? fund))"
+  :replace "(and payment from-account false)"}
+
+ {:id :funding-currency
+  :invariant "the funding account's currency must match the payment"
+  :file "src/shiharai/governor.cljc"
+  :find "(and fund (some? currency) (not= currency (:account/currency fund)))"
+  :replace "(and fund (some? currency) false)"}
+
+ {:id :unbalanced-posting
+  :invariant "the double-entry posting must balance"
+  :file "src/shiharai/governor.cljc"
+  :find "(and posting (not (bank/balanced? (:ledger/entries posting))))"
+  :replace "(and posting false)"}
+
+ {:id :posting-mismatch
+  :invariant "the advisor's posting is compared with the governor's redraft"
+  :file "src/shiharai/governor.cljc"
+  :find "(not= (:ledger/entries posting) (:ledger/entries redrafted))"
+  :replace "(not= 1 1)"}
+
+ {:id :unchecked-credit-jurisdiction
+  :invariant "taxlaw's :none is not a pass"
+  :file "src/shiharai/governor.cljc"
+  :find "(= :none (:taxlaw/coverage tax))"
+  :replace "(= :nope (:taxlaw/coverage tax))"}
+
+ {:id :credit-unsupported
+  :invariant "a claimed credit needs a valid 登録番号"
+  :file "src/shiharai/governor.cljc"
+  :find "(false? (:taxlaw/supported? tax))"
+  :replace "(nil? (:taxlaw/supported? tax))"}
+
+ {:id :electronic-preservation
+  :invariant "電子帳簿保存法 第七条, via taxlaw"
+  :file "src/shiharai/governor.cljc"
+  :find "(false? (:taxlaw/preserved? pres))"
+  :replace "(nil? (:taxlaw/preserved? pres))"}
+
+ {:id :statutory-term-exceeded
+  :invariant "取適法 第三条, in the unambiguous direction"
+  :file "src/shiharai/governor.cljc"
+  :find "(law/exceeded? terms)"
+  :replace "false"}
+
+ {:id :statutory-sixty-day-limit
+  :invariant "the 60-day limit itself"
+  :file "src/shiharai/law.cljc"
+  :find ":law/term (cond (> n limit) :exceeded"
+  :replace ":law/term (cond (> n (inc limit)) :exceeded"}
+
+ {:id :statutory-boundary
+  :invariant "exactly 60 days goes to a human instead of passing"
+  :file "src/shiharai/governor.cljc"
+  :find "(law/boundary? terms)"
+  :replace "false"}
+
+ {:id :statutory-undeterminable
+  :invariant "in scope and unevaluable is not compliant"
+  :file "src/shiharai/governor.cljc"
+  :find "(= :undeterminable (:law/coverage terms))"
+  :replace "(= :nope (:law/coverage terms))"}
+
+ {:id :calendar-rejects-impossible-days
+  :invariant "2026-02-30 is not a date"
+  :file "src/shiharai/law.cljc"
+  :find "(when (= [y m d] (epoch-day->civil z)) z)"
+  :replace "z"}
+
+ {:id :release-escalates
+  :invariant ":release-payment always reaches a human"
+  :file "src/shiharai/governor.cljc"
+  :find "(def escalating-ops #{:release-payment})"
+  :replace "(def escalating-ops #{})"}
+
+ {:id :unverified-destination-escalates
+  :invariant "an unvalidatable account scheme is a human decision"
+  :file "src/shiharai/governor.cljc"
+  :find "(= :unverified (:destination/coverage dest))"
+  :replace "(= :nope (:destination/coverage dest))"}
+
+ {:id :confidence-floor
+  :invariant "a proposal below the floor escalates"
+  :file "src/shiharai/governor.cljc"
+  :find "\n  0.6)"
+  :replace "\n  0.0)"}
+
+ {:id :router-checks-hard-first
+  :invariant "the graph's router tests :hard? before :escalate?"
+  :file "src/shiharai/actor.cljc"
+  :find "(cond hard? :hold\n        escalate? :request-approval"
+  :replace "(cond escalate? :request-approval\n        hard? :hold"}]

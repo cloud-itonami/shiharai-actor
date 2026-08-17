@@ -1,0 +1,49 @@
+{:paths ["src"]
+
+ ;; ZERO `:local/root`. Every dependency below is a git coordinate, so this
+ ;; repo resolves from a clone with no sibling checkouts on disk — which is
+ ;; also the only way a murakumo fleet gate can build it, since the fleet
+ ;; ships one repo's tree and no siblings (CLAUDE.md, fleet-ci section).
+ ;; The suite in this repo is run from a directory with no siblings before
+ ;; every release; that is the measurement, not the intention.
+ :deps {;; The itonami actor pattern's governor layer, written once. The
+        ;; verdict map is NOT hand-rolled here — `gov/verdict` assembles it,
+        ;; and `gov/conformance-failures` is asserted over every verdict this
+        ;; actor can emit (see test/shiharai/conformance_test.clj).
+        io.github.kotoba-lang/governor
+        {:git/url "https://github.com/kotoba-lang/governor.git"
+         :git/sha "90a2944e617e58b9c90314b7e84b003ec3ea0c1f"}
+
+        ;; What a tax record must carry, by jurisdiction. Answers in THREE
+        ;; values (`:none` / `:not-declared` / `:checked`), and this actor
+        ;; keeps all three rather than collapsing them to a boolean.
+        io.github.kotoba-lang/taxlaw
+        {:git/url "https://github.com/kotoba-lang/taxlaw.git"
+         :git/sha "718b09ea4fd608dc3a12d0baaa095588046a2e5c"}
+
+        ;; IBAN (ISO 13616) mod-97 identification and double-entry
+        ;; balanced-posting validation. The governor redrafts the posting a
+        ;; payment would produce from the store's own records and validates
+        ;; it with `bank/balanced?` — it does not trust the advisor's
+        ;; arithmetic and it does not reimplement the checksum.
+        ;;
+        ;; `kotoba.banking.api` (Open Banking payment initiation) is
+        ;; deliberately NOT used. See README, "The ceiling".
+        io.github.kotoba-lang/banking
+        {:git/url "https://github.com/kotoba-lang/banking.git"
+         :git/sha "b8750ad17d16c012c7de62d4bf785973464495cc"}
+
+        ;; StateGraph + checkpointing, so `:release-payment` interrupts
+        ;; before a human resumes the thread.
+        io.github.kotoba-lang/langgraph
+        {:git/sha "5b4e5e70837b849b14b6a5800894e3be202ad5fa"}}
+
+ :aliases
+ {:test {:extra-paths ["test"]
+         :extra-deps {io.github.cognitect-labs/test-runner
+                      {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
+         :main-opts ["-m" "cognitect.test-runner"]
+         :exec-fn cognitect.test-runner.api/test}
+  :lint {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2024.11.14"}}
+         :main-opts ["-m" "clj-kondo.main" "--lint" "src" "test"
+                     "--fail-level" "error"]}}}
