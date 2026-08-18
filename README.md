@@ -44,6 +44,7 @@ Concretely, and checkably:
 | bank API client | none. `kotoba.banking` is a dependency for **IBAN validation and double-entry arithmetic**; `kotoba.banking.api`, which builds Berlin Group payment-initiation requests, is deliberately **not** required, and is not on the allow-list the ceiling test enforces. The two names are one character apart, so adding it would not look like a change of policy in a diff — it would look like a typo |
 | the strongest thing `:commit` writes | a map with `:payment/status :authorised` |
 | `:effect` the advisor may emit | `:propose`, and only that — `governor.core/no-actuation` holds anything else |
+| the hand-off to the books | `shiharai.shiwake` **returns a value**. It has no client and no transport, and its `:require` list is pinned to `#{clojure.string}` by a test — a call arrives either as a host escape or as a dependency, and both doors are shut. See "仕訳 — the hand-off to the books" |
 | what the HTTP surface can reach | scheduling, and nothing past it. The op is a **constant** in `propose-payment-core!`, not a field, so no body asks for a release; an escalation returns 202 and stops; and there is no function on that surface that resumes an interrupted thread |
 
 > An earlier version of this table claimed `grep -r "http\|fetch\|slurp" src/`
@@ -301,6 +302,118 @@ to tell.
 
 ---
 
+## 仕訳 — the hand-off to the books
+
+**A payment that was authorised and never became a journal entry is money
+nobody's books show.** Deciding is not bookkeeping, and until
+`src/shiharai/shiwake.cljc` this repository stopped at the decision: it could
+say a disbursement was approved and had no way to say so to the ledger that
+has to carry it. `cloud-itonami-isco-4311` owns that ledger.
+`cloud-itonami/keihi` landed the same seam on the expense-claim side; this is
+its counterpart, and the two are not mirror images.
+
+`shiwake/entry-request` turns one `shiharai.store/ledger` fact into the
+`:draft-entry` request 4311 accepts. Two public functions, no third.
+
+### It produces a value; it makes no call
+
+No client, no transport, no reference to the ledger actor. The value goes out
+of this repository the way every other decision does — carried by something
+else. Two reasons, and the second is the load-bearing one:
+
+1. This actor's ceiling is that it proposes. Writing into another actor's
+   ledger would be the actuation the whole design refuses.
+2. **A call would make the accounts this actor's business, and they are not.**
+   Which 買掛金 account a supplier sits in and which 現金預金 account the
+   money left are the client's chart. `kotoba-lang/shohyo` refuses to guess
+   what an account is precisely because a statement that guessed still
+   balances, so the mapping is an argument here too.
+
+Checked rather than claimed: `this-namespace-reaches-nothing` scans the file
+for call shapes **and pins its `:require` list to exactly
+`#{clojure.string}`**, because a call arrives either as a host escape or as a
+dependency and the pin closes the second door. The token `"post"` is
+deliberately not in that scan — in an accounts-payable repository it is
+domain vocabulary (`postable-statuses`, `redraft-posting`), so scanning for
+it reddens on the subject matter. `keihi` could afford that token; this repo
+found out it cannot.
+
+### The direction, and why it is the other way round from an expense claim
+
+```
+Dr 買掛金 / 未払金   the liability this payable is, goes down
+Cr 現金預金          the funding account the money left, goes down
+```
+
+An expense claim **recognises** a cost that was not on the books before. A
+payable was already recognised when the invoice was booked — this actor's own
+sibling `cloud-itonami/tehai` drafts them — so a payment that debited an
+expense would book the same cost twice, once on arrival and once on payment.
+What a payment changes is which side of the balance sheet the money sits on,
+not how much of it there is.
+
+It is the same direction `governor/redraft-posting` already takes. What is
+**not** reused from that redraft is its account names: `"AP"` is
+`governor/default-ap-account`, a constant this repository chose, and
+`"FUND-EUR"` is a row in this actor's own registry. Neither is an account in
+anybody's chart. The redraft proves the payment balances; the mapping says
+what it balances between.
+
+### A scheduled payment is not a payment
+
+`postable-statuses` is `#{:authorised}` and `store/settled-statuses` is
+`#{:scheduled :authorised}`, and **the difference between those two sets is
+the distinction this namespace exists to hold**. `:scheduled` consumes a
+payable's balance because a second payment against an invoice already
+promised is a duplicate; it does not enter the books, because nothing has
+left the account. One set answers 「もう払う約束をしたか」, the other
+「もう出て行ったか」.
+
+### Every way the hand-off can lose a payment is a named status
+
+| | |
+|---|---|
+| `:not-authorised` | held, or nobody approved it. Its own value and never nil, because a caller treating "no entry" as "nothing to do" would skip exactly the payments somebody has to look at |
+| `:not-released` | scheduled; the cash has not moved. Separate from the above because the action it calls for — approve it, or decide not to — is a different action |
+| `:unknown-payment-status` | a status this repo cannot read. Folding it into `:not-released` would say *a human still has to approve this* about a record nobody understood |
+| `:no-mapping` | the supplier or the funding account is unmapped. **No suspense-account fallback**: that posts the entry and makes the missing decision invisible, which is worse than not posting, because a hole in the books can be found and a plausible wrong account cannot. **A half-filled mapping is no mapping** — an entry missing one line balances by having lost it |
+| `:unusable-payment` | the amount is not a positive integer of minor units, or there is no currency, or no invoice is cited. 4311's own body parser accepts any `number?`, so a fractional minor unit would cross it — this side is the narrower one on purpose |
+
+`entry-requests` returns `{:ok [...] :skipped [...]}` and each refusal carries
+`:shiwake/record`, the fact it refused. A batch that filtered would report a
+clean run and leave the unconvertible payments invisible, which on this side
+of the books means a disbursement with no entry against it.
+
+### Three things this seam is honest about
+
+**Partial payments post at the payment's amount.** The residue stays an open
+買掛金 balance and needs no entry, because nothing about it changed. The
+figure comes from `:payment/amount-minor` and this namespace never sees the
+payable's face value — so there is nothing here to reach for by mistake.
+
+**The input is the ledger fact, not the graph's final state**, and the two
+are not interchangeable. A released payment routes through
+`:request-approval`, so `run-request!` reports *that* disposition for a run
+that committed; the `:commit` node writes `:disposition :commit` onto the fact
+it appends. One value records a route and the other an outcome. Folding the
+state would call an authorised payment `:not-authorised`, which is asserted
+in `the-graphs-final-state-is-a-route-and-the-ledger-fact-is-an-outcome`
+rather than left as a warning.
+
+**An entry cannot be traced back to the payment that produced it, except
+through the payable it cites.** `draft-entry-core!` reads `:source-doc` and
+`:lines` out of a body and drops everything else, so the payment id is
+reported on the wrapper instead of being smuggled into a field that would
+vanish. Naming the gap beats shipping a field that looks like it arrived.
+
+And the citation itself is the right way round: the payable is the source
+document, and **the registry that decides whether that citation is good is
+4311's, not this one's** — that actor holds `:unknown-source-doc` for a
+document its own store never registered. A payable this actor knows is not
+thereby a 原始証憑 the ledger knows.
+
+---
+
 ## Measured
 
 Run 2026-08-18 from a fresh `git clone` into `/tmp`, with an empty dependency
@@ -311,20 +424,21 @@ satisfied one:
 ```
 $ git clone …/shiharai-actor.git /tmp/shiharai-fresh && cd /tmp/shiharai-fresh
 $ CLJ_CACHE=…/cache GITLIBS=…/gitlibs clojure -M:test
-Ran 130 tests containing 792 assertions.
+Ran 146 tests containing 899 assertions.
 0 failures, 0 errors.
 
 $ CLJ_CACHE=…/cache GITLIBS=…/gitlibs clojure -M:lint
-linting took 679ms, errors: 0, warnings: 0
+linting took 673ms, errors: 0, warnings: 0
 
 $ ls …/gitlibs/libs
 io.github.cognitect-labs  io.github.com-junkawasaki  io.github.kotoba-lang
 ```
 
 The iteration that added the second store backend and the surface took the
-suite from **68 tests / 373 assertions** to 130 / 792.
+suite from **68 tests / 373 assertions** to 130 / 792; the 仕訳 hand-off took
+it to **146 / 899**.
 
-### The tests can fail — 57 mutations, 57 killed, 0 survived, 0 unmeasured
+### The tests can fail — 74 mutations, 74 killed, 0 survived, 0 unmeasured
 
 A test that has never gone red is a test nobody has measured. `tools/mutate.cljs`
 applies one single-token mutation from `tools/mutations.edn`, runs the suite,
@@ -334,13 +448,13 @@ a comment produces a red suite that proves nothing.
 
 ```
 $ nbb tools/check-mutations.cljs
-SCANNED	57 mutations
+SCANNED	74 mutations
 all find strings occur exactly once
 
 $ nbb tools/mutate.cljs
-baseline: Ran 130 tests containing 792 assertions. GREEN
+baseline: Ran 146 tests containing 899 assertions. GREEN
 ...
-=== 57 mutations, 57 killed, 0 survived, 0 unmeasured
+=== 74 mutations, 74 killed, 0 survived, 0 unmeasured
 ```
 
 **`0 unmeasured` is a new column, and it is there because the harness scored
@@ -418,13 +532,31 @@ thing reported have to be the same thing*, and a tally cannot tell you that.
 | `:edge-journalled-is-not-called-durable` | no vouching for an unseen host | 1 |
 | **the ceiling** | | |
 | `:ceiling-permits-only-known-dependencies` | a dependency that could reach a host fails the build | 1 |
+| **仕訳 — the hand-off to the books** | | |
+| `:shiwake-unauthorised-is-its-own-status` | "no entry" ≠ "nothing to do" | 4 |
+| `:shiwake-only-an-authorised-payment-posts` | **a scheduled payment is a commitment, not a settlement** | 3 |
+| `:shiwake-scheduled-has-its-own-name` | "wait for approval" ≠ "look at this" | 3 |
+| `:shiwake-unknown-status-is-not-approval-pending` | an unreadable status is not a cautious one | 1 |
+| `:shiwake-no-suspense-account` | a suspense fallback makes the missing decision invisible | 2 |
+| `:shiwake-half-a-mapping-is-no-mapping` | an entry missing one line balances by having lost it | 2 |
+| `:shiwake-amount-is-a-positive-integer-of-minor-units` | narrower than the ledger's own parser | 1 |
+| `:shiwake-currency-must-be-declared` | an amount with no unit is not an amount | 1 |
+| `:shiwake-a-document-must-be-cited` | 取引の捏造禁止, from this side | 1 |
+| `:shiwake-the-payment-discharges-a-liability` | **Dr 買掛金 / Cr 現金預金, not an expense** | 3 |
+| `:shiwake-every-line-carries-its-currency` | 4311 groups by currency before comparing | 1 |
+| `:shiwake-the-payable-is-the-source-document` | the invoice, not the payment that settled it | 4 |
+| `:shiwake-request-carries-only-what-the-ledger-reads` | no field that endpoint silently drops | 1 |
+| `:shiwake-batch-keeps-what-it-could-not-convert` | a batch that filtered reports a clean run | 2 |
+| `:shiwake-batch-ok-is-only-the-ok` | a refusal does not travel in the `:ok` half | 2 |
+| `:shiwake-a-refusal-carries-the-record-it-refused` | a refusal nobody can attribute is one nobody can act on | 2 |
+| `:shiwake-reaches-nothing` | it produces a value; it makes no call | 2 |
 
 `:scheduled-consumes-balance` reddening 22 tests is not padding: `:scheduled`
 ceasing to consume the balance is the single change that would let the same
 invoice be paid twice, and the contract test now asks that question on two
 backends and across a reopen, so it is asked from more directions than before.
 
-**The harness changed the code three times.** Its first run had two survivors,
+**The harness changed the code four times.** Its first run had two survivors,
 and both were real:
 
 1. `:unbalanced-posting` guarded the *governor's own* redraft — which is a
@@ -438,6 +570,18 @@ and both were real:
    The routing is now the named `actor/route`, and
    `the-router-fails-closed-on-a-malformed-verdict` feeds it the malformed
    verdict the one drifted governor in this fleet actually produced.
+
+**And a fourth, in the 仕訳 hand-off — where the harness was right and the
+mutation was wrong.** `:shiwake-only-an-authorised-payment-posts` widened
+the postable set to include `:scheduled`, and **nothing went red**. The
+survivor was correct: an earlier `(= :scheduled status)` branch already
+caught it, so the widened check was unreachable and nothing had actually
+been broken. Reading the pair — *the thing broken and the thing reported
+have to be the same thing* — is what caught it; the tally alone said
+"survivor" and would have been read as a gap in the tests. `postable-payment`
+now tests `postable-statuses` **first**, which is what makes that set the
+only thing deciding what posts, and therefore the only thing that can be
+widened wrongly. It reddens three tests.
 
 The third was the surface's own, and the test found it rather than a review:
 `non-blank` returned `false` for a non-string instead of `nil`, every caller
@@ -485,6 +629,24 @@ Over a journalled store, so that the payment set outlives the connection:
 (store/outstanding st' "pbl-1")   ;; => 0. The duplicate is still refused.
 ```
 
+And the authorised payment as an entry the ledger will take — a value, which
+something else carries:
+
+```clojure
+(require '[shiharai.shiwake :as shiwake])
+
+(shiwake/entry-requests
+ (store/ledger st)
+ {:suppliers {"s-1" "買掛金"}          ; the client's chart, not this actor's
+  :accounts  {"FUND-EUR" "普通預金"}})
+;; => {:ok      [{:shiwake/status :ok :shiwake/payment-id "pay-1"
+;;                :shiwake/request {:op :draft-entry :source-doc "pbl-1"
+;;                                  :lines [{:side :dr :account "買掛金"   …}
+;;                                          {:side :cr :account "普通預金" …}]}
+;;                :shiwake/record  {…}}]
+;;     :skipped [{:shiwake/status :not-released …}]}   ; kept, not filtered
+```
+
 ## Known gaps
 
 - **No durable HOST is wired up.** `DatomicStore` takes the `{:append :read}`
@@ -507,6 +669,17 @@ Over a journalled store, so that the payment set outlives the connection:
   portable and tested; no Worker, route table or CACAO verifier ships with
   them, and the verifier deliberately never will. That is a real gap in
   deployability and a deliberate one in authority.
+- **Nothing carries the 仕訳 request to the ledger.** That is the design —
+  this actor returns a value and something with its own authority delivers
+  it — but it means the seam is proved and not yet used. Until an operator
+  wires a carrier, an authorised payment still becomes a journal entry only
+  because somebody moved the map.
+- **Nothing here reconciles the two directions.** `shiwake` converts what
+  the ledger fact says; it does not go back and check that 4311 accepted it.
+  A request refused there (`:unknown-source-doc`, `:unbalanced-entry`) is
+  invisible from this side, so "converted" is not "posted". Naming it
+  because the whole point of the namespace is that a gap between a decision
+  and an entry is silent.
 - **One statute, one jurisdiction.** 取適法 第三条 for JP, plus whatever
   `kotoba.taxlaw` covers. Nothing here is tax or legal advice.
 
