@@ -62,8 +62,8 @@
   builds Berlin Group payment-initiation requests. Adding it would not look
   like a change of policy in a diff — it would look like a typo."
   '#{;; this repo
-     shiharai.actor shiharai.advisor shiharai.governor shiharai.law
-     shiharai.shiwake shiharai.store
+     shiharai.actor shiharai.advisor shiharai.governor shiharai.handoff
+     shiharai.law shiharai.shiwake shiharai.store
      ;; the fleet's shared decision layers — pure, no I/O
      governor.core kotoba.banking kotoba.taxlaw
      ;; the graph and its checkpoint — in-process
