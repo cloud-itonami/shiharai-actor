@@ -34,8 +34,18 @@
   There is no method here that moves money, and none that talks to anything.
   `commit-payment!` writes a record whose `:payment/status` is `:scheduled`
   or `:authorised`; a disbursement system that does not live in this
-  repository would be what acts on it. See README, \"The ceiling\"."
-  (:require [kotoba.banking :as bank]))
+  repository would be what acts on it. See README, \"The ceiling\".
+
+  ## Two backends
+
+  `MemStore` is the default and holds everything in one process-local atom.
+  `DatomicStore` holds it in a `langchain.db` connection, which can be given
+  an append-only event journal it replays on open. Both satisfy the same
+  contract, asserted assertion-for-assertion in
+  `test/shiharai/store_contract_test.clj`."
+  (:require [kotoba.banking :as bank]
+            [langchain.db :as d]
+            [langchain-store.core :as ls]))
 
 (defprotocol Store
   (supplier [s supplier-id])
@@ -148,18 +158,28 @@
   Store
   (supplier [_ id] (get-in @a [:suppliers id]))
   (payable [_ id] (get-in @a [:payables id]))
+  ;; Sorted by id, here and in DatomicStore. A read whose ORDER depends on
+  ;; the backend is a read two deployments can answer differently, and the
+  ;; contract test would have no way to compare them without picking one
+  ;; backend's accident as the answer.
   (payables-of [_ supplier-id]
-    (filterv #(= supplier-id (:payable/supplier %)) (vals (:payables @a))))
+    (->> (vals (:payables @a))
+         (filter #(= supplier-id (:payable/supplier %)))
+         (sort-by :payable/id)
+         vec))
   (account-of [_ id] (get-in @a [:accounts id]))
-  (accounts [_] (vec (vals (:accounts @a))))
+  (accounts [_] (vec (sort-by :account/id (vals (:accounts @a)))))
   (payment [_ id] (get-in @a [:payments id]))
   ;; Keyed by :payment/id, not conj'd onto a vector. Releasing a scheduled
   ;; payment REPLACES it; if both records stayed live, `committed-minor`
   ;; would count the same money twice and the release of a correct payment
   ;; would look like an overpayment.
-  (payments [_] (vec (vals (:payments @a))))
+  (payments [_] (vec (sort-by :payment/id (vals (:payments @a)))))
   (payments-for [_ payable-id]
-    (filterv #(= payable-id (:payment/payable %)) (vals (:payments @a))))
+    (->> (vals (:payments @a))
+         (filter #(= payable-id (:payment/payable %)))
+         (sort-by :payment/id)
+         vec))
   (postings [_] (:postings @a))
   (ledger [_] (:ledger @a))
   (register-supplier! [s x] (swap! a assoc-in [:suppliers (:supplier/id x)] x) s)
@@ -175,3 +195,125 @@
    (->MemStore (atom (merge {:suppliers {} :accounts {} :payables {}
                              :payments {} :postings [] :ledger []}
                             seed)))))
+
+;; ---------------------------------------------------------------------------
+;; DatomicStore (langchain.db)
+;;
+;; The same protocol over a Datomic-API-compatible EAV store, so the backend
+;; is a swap and not a rewrite (`cloud-itonami/tehai` and `cloud-itonami/kintai`
+;; are this fleet's reference adopters). Pure `.cljc`: it runs offline against
+;; langchain.db's in-process store, and the SAME record points at a real
+;; Datomic or a kotoba-server pod by swapping langchain.db's `:db-api`.
+;;
+;; ## Why this actor needed one more than most
+;;
+;; `:duplicate-payment` is a HARD hold with no approval route, and what it is
+;; enforced against is the set of committed payments. Under `MemStore` that
+;; set lives exactly as long as the process: restart the actor and every
+;; payment it has ever made becomes payable again, silently, with a green
+;; verdict. The hold does not fail — it stops having anything to be true
+;; about. Paying a supplier twice is the classic accounts-payable accident,
+;; and "we restarted" is how it happens.
+;;
+;; ## What is durable, and what this repository can honestly claim
+;;
+;; `datomic-store` takes langchain.db's persistence port — an
+;; `{:append :read}` pair of an append-only event log, replayed on open. That
+;; is the seam durability plugs into; it is not itself a durable host. The
+;; events are plain EDN, so a host that can write bytes (a file, B2, a
+;; kotobase pod) is one `{:append :read}` pair away, and nothing here has to
+;; change for it. `journal` is an in-process reference implementation of that
+;; port, and it is honest about being in-process.
+;;
+;; The property that IS proved here, on both backends, is the one that
+;; decides whether durability is even reachable: **the committed-payment set
+;; lives in the backing store and not in the store object.** A store record
+;; opened afresh over the same backing sees every prior payment, so
+;; `:duplicate-payment` still fires. Where the two backends differ is what
+;; the backing is — a process-local atom for `MemStore`, an EDN event log
+;; that survives serialisation for `DatomicStore`.
+;; ---------------------------------------------------------------------------
+
+(def ^:private schema
+  (ls/identity-schema [:supplier/id :account/id :payable/id :payment/id
+                       :posting/seq :ledger/seq]))
+
+(defn- blobs [conn id-attr edn-attr]
+  (->> (d/q [:find [(quote ?v) '...] :where ['?e id-attr '_] ['?e edn-attr '?v]] (d/db conn))
+       (mapv ls/dec*)))
+
+(defn- next-seq [conn seq-attr]
+  (count (d/q [:find '?e :where ['?e seq-attr '_]] (d/db conn))))
+
+(defrecord DatomicStore [conn]
+  Store
+  (supplier [_ id] (ls/blob-lookup conn :supplier/id :supplier/edn id))
+  (payable [_ id] (ls/blob-lookup conn :payable/id :payable/edn id))
+  (payables-of [_ supplier-id]
+    (->> (blobs conn :payable/id :payable/edn)
+         (filter #(= supplier-id (:payable/supplier %)))
+         (sort-by :payable/id)
+         vec))
+  (account-of [_ id] (ls/blob-lookup conn :account/id :account/edn id))
+  (accounts [_] (vec (sort-by :account/id (blobs conn :account/id :account/edn))))
+  (payment [_ id] (ls/blob-lookup conn :payment/id :payment/edn id))
+  ;; `:payment/id` is `:db.unique/identity`, so re-committing an id UPSERTS.
+  ;; That is the same rule MemStore's keyed map gives: a release replaces the
+  ;; scheduled record rather than adding a second live one, and two live
+  ;; records would make `committed-minor` count the same money twice.
+  (payments [_] (vec (sort-by :payment/id (blobs conn :payment/id :payment/edn))))
+  (payments-for [_ payable-id]
+    (->> (blobs conn :payment/id :payment/edn)
+         (filter #(= payable-id (:payment/payable %)))
+         (sort-by :payment/id)
+         vec))
+  (postings [_] (ls/read-stream conn :posting/seq :posting/edn))
+  (ledger [_] (ls/read-stream conn :ledger/seq :ledger/fact))
+  (register-supplier! [s x]
+    (ls/put-blob! conn :supplier/id :supplier/edn (:supplier/id x) x) s)
+  (register-account! [s x]
+    (ls/put-blob! conn :account/id :account/edn (:account/id x) x) s)
+  (register-payable! [s x]
+    (ls/put-blob! conn :payable/id :payable/edn (:payable/id x) x) s)
+  (commit-payment! [s p]
+    (ls/put-blob! conn :payment/id :payment/edn (:payment/id p) p) s)
+  (commit-posting! [s p]
+    (ls/append-blob! conn :posting/seq :posting/edn (next-seq conn :posting/seq) p) s)
+  (append-ledger! [s fact]
+    (ls/append-blob! conn :ledger/seq :ledger/fact (next-seq conn :ledger/seq) fact) s))
+
+(defn journal
+  "An in-process implementation of langchain.db's persistence port — the
+  `{:append :read}` pair `create-conn` replays on open and `transact!`
+  appends to.
+
+  **This is the seam, not the durability.** The events are plain EDN
+  (`[:db/add e a v]` triples over string blobs), so a host that can write
+  bytes supplies the same two functions and nothing in this namespace
+  changes. What `journal` gives on its own is a log that outlives the
+  connection built over it, which is what lets a test drop a store entirely
+  and open another one from the log alone.
+
+  `a` is an atom holding the vector of events; pass one to resume from
+  events you already have."
+  ([] (journal (atom [])))
+  ([a]
+   {:append (fn [event] (swap! a conj event) event)
+    :read (fn [since] (vec (drop (or since 0) @a)))
+    ::events a}))
+
+(defn journal-events
+  "The EDN events a `journal` has accumulated. Data, not a handle — this is
+  what a durable host would be writing."
+  [j]
+  @(::events j))
+
+(defn datomic-store
+  "A `DatomicStore` over a `langchain.db` connection.
+
+  With no argument the connection keeps its history only in memory. With a
+  `journal` (or any `{:append :read}` port) the connection replays that log
+  on open and appends to it on every write, so opening a second store over
+  the same log reconstructs the same records."
+  ([] (->DatomicStore (d/create-conn schema)))
+  ([persist] (->DatomicStore (d/create-conn schema persist))))

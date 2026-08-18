@@ -63,12 +63,27 @@
   (println (str "\n=== " (:id m) " — " (:invariant m)))
   (apply-mutation! m)
   (let [{:keys [exit out]} (run-tests)
-        reds (failing-tests out)]
+        reds (failing-tests out)
+        summary (summary-line out)
+        ran? (not= "no summary" summary)]
     (restore! m)
-    (println "   " (summary-line out))
-    (if (and (zero? exit) (empty? reds))
+    (println "   " summary)
+    (cond
+      ;; The suite never ran. A non-zero exit alone used to score this as a
+      ;; kill, which is how `:stream-seq-advances` passed for a while with an
+      ;; unbalanced paren: the file stopped READING, nothing was measured,
+      ;; and the tally said 57/57. A mutation that breaks the reader
+      ;; demonstrates the reader. Its own outcome, and not zero.
+      (not ran?)
+      (do (println "    UNMEASURED — the suite did not run. The mutation broke"
+                   "\n    the build rather than an invariant; fix the mutation.")
+          (assoc m :unmeasured? true :survived? false :reddened []))
+
+      (and (zero? exit) (empty? reds))
       (do (println "    SURVIVOR — no test noticed. The invariant is unmeasured.")
           (assoc m :survived? true :reddened []))
+
+      :else
       (do (println (str "    reddened " (count reds) ":"))
           (doseq [t reds] (println (str "      - " t)))
           (assoc m :survived? false :reddened reds)))))
@@ -83,12 +98,19 @@
     (when-not (zero? (:exit baseline))
       (println (:out baseline))
       (js/process.exit 2))
+    (when (empty? ms)
+      (println "no mutations selected — refusing to report a pass")
+      (js/process.exit 2))
     (let [results (mapv run-one ms)
-          survivors (filterv :survived? results)]
+          survivors (filterv :survived? results)
+          unmeasured (filterv :unmeasured? results)]
       (println (str "\n=== " (count results) " mutations, "
-                    (- (count results) (count survivors)) " killed, "
-                    (count survivors) " survived"))
+                    (- (count results) (count survivors) (count unmeasured))
+                    " killed, "
+                    (count survivors) " survived, "
+                    (count unmeasured) " unmeasured"))
       (doseq [s survivors] (println "  SURVIVOR:" (:id s)))
-      (js/process.exit (if (seq survivors) 1 0)))))
+      (doseq [u unmeasured] (println "  UNMEASURED:" (:id u)))
+      (js/process.exit (if (or (seq survivors) (seq unmeasured)) 1 0)))))
 
 (apply -main *command-line-args*)

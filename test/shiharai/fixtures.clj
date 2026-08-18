@@ -10,9 +10,14 @@
 (def valid-iban "DE89370400440532013000")
 (def bad-iban "DE89370400440532013001")
 
-(defn fresh-store []
-  (let [st (store/mem-store)]
-    ;; --- accounts -----------------------------------------------------
+(defn seed!
+  "Register the whole fixture into ANY `shiharai.store/Store`.
+
+  Backend-agnostic on purpose: `MemStore` and `DatomicStore` are seeded by
+  the same calls, so a difference the contract test finds is a difference in
+  the store rather than a difference in how it was filled."
+  [st]
+  ;; --- accounts -----------------------------------------------------
     (store/register-account!
      st (assoc (bank/account valid-iban "EUR" :holder "Acme GmbH")
                :account/scheme :iban))
@@ -75,7 +80,12 @@
                                  :payable/currency "EUR"
                                  :payable/received-date "2026-01-01"
                                  :payable/due-date "2026-02-01"})
-    st))
+  st)
+
+(defn fresh-store
+  "The fixture over the default in-process `MemStore`."
+  []
+  (seed! (store/mem-store)))
 
 (defn payment [& {:as kv}]
   (merge {:payment/id "pay-1"
