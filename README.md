@@ -303,16 +303,22 @@ to tell.
 
 ## Measured
 
-Run 2026-08-18 from a fresh `git clone` into `/tmp`, no sibling checkouts on
-disk:
+Run 2026-08-18 from a fresh `git clone` into `/tmp`, with an empty dependency
+cache **and an empty `GITLIBS`** — so every dependency was fetched from its
+git remote during the run, and no sibling checkout on this disk could have
+satisfied one:
 
 ```
-$ clojure -M:test
+$ git clone …/shiharai-actor.git /tmp/shiharai-fresh && cd /tmp/shiharai-fresh
+$ CLJ_CACHE=…/cache GITLIBS=…/gitlibs clojure -M:test
 Ran 130 tests containing 792 assertions.
 0 failures, 0 errors.
 
-$ clojure -M:lint
-linting took 701ms, errors: 0, warnings: 0
+$ CLJ_CACHE=…/cache GITLIBS=…/gitlibs clojure -M:lint
+linting took 679ms, errors: 0, warnings: 0
+
+$ ls …/gitlibs/libs
+io.github.cognitect-labs  io.github.com-junkawasaki  io.github.kotoba-lang
 ```
 
 The iteration that added the second store backend and the surface took the
