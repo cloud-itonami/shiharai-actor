@@ -66,12 +66,20 @@
   19. posting mismatch      — the advisor supplied a posting that differs
                               from the one redrafted from the store. tehai's
                               `:total-mismatch`, on the payment side.
-  20. unchecked credit jurisdiction — the payable CLAIMS 仕入税額控除 in a
-                              jurisdiction `kotoba.taxlaw` has never
-                              catalogued. `:none` is not a pass.
-  21. input-tax credit unsupported — it claims the credit and the qualified
-                              invoice registration number is missing or
-                              malformed.
+  20. unchecked credit jurisdiction — the payable CLAIMS 仕入税額控除 where
+                              `kotoba.taxlaw` has catalogued no invoice rule.
+                              `:none` is not a pass.
+  20b. credit jurisdiction out of scope — it claims the credit where the
+                              catalog deliberately holds no rule and says why
+                              (the United States has no federal VAT, so no
+                              federal analogue of 適格請求書 exists). HELD
+                              exactly as hard as 20 — the two differ only in
+                              where the refusal sends its reader, and 20
+                              would send them to read a law that is not
+                              there.
+  21. input-tax credit unsupported — it claims the credit and the
+                              registration number is missing or malformed for
+                              that jurisdiction's format.
   22. electronic record not preserved — 電子帳簿保存法 第七条, via
                               `kotoba.taxlaw/record-preservation`, and only
                               when that library answers `:checked`.
@@ -95,17 +103,41 @@
        NOT a statutory one — no article in this repo says it is unlawful, so
        it does not hold.
    E5. confidence below `confidence-floor`.
+   E6. the registration number passed a format check the catalog itself
+       describes as partial. In the EU that is every accepted claim: Article
+       215 of Directive 2006/112/EC gives an ISO 3166 alpha-2 prefix and
+       nothing else, so `XX1` satisfies the only format rule there is. Same
+       shape as E2 — no validator, therefore a person.
 
   ## What is reported but not enforced
 
-  `:extra` carries `:tax`, `:preservation`, `:destination`, `:payment-terms`,
-  `:outstanding` and `:escalations`. Where this governor deliberately did not
-  hold, the verdict still SAYS what was not checked — a console that shows a
-  green verdict for a payable whose origin was never declared is showing a
-  question, not an answer."
+  `:extra` carries `:tax`, `:registration-gap`, `:retention`,
+  `:preservation`, `:destination`, `:payment-terms`, `:outstanding` and
+  `:escalations`. Where this governor deliberately did not hold, the verdict
+  still SAYS what was not checked — a console that shows a green verdict for a
+  payable whose origin was never declared is showing a question, not an
+  answer.
+
+  `:retention` is the newest of those and the one most easily misread.
+  `kotoba.taxlaw/retention-years` is nil for `[:eu]`, for `[:us]` and for a
+  jurisdiction nobody catalogued, and those are not the same nil — one
+  instrument hands the period to the Member State, another states a condition
+  instead of a number, and the third was never read. `shiharai.jurisdiction`
+  separates them into `:none` / `:deferred` / `:stated`, and **this actor
+  never answers 7 or 10 years where the instrument states none.**
+
+  ## Non-JP payables
+
+  What this actor can and cannot say about a payable in `[:eu]` and in
+  `[:us]` is set out in `shiharai.jurisdiction`. The short form: the EU has a
+  Directive analogue of the 適格請求書 registration number and a checkable
+  prefix, so the actor checks the prefix, says so, and escalates rather than
+  scheduling; the United States has no federal analogue at all, so a claim
+  there is held with the reason attached rather than with a bare refusal."
   (:require [governor.core :as gov]
             [kotoba.banking :as bank]
             [kotoba.taxlaw :as taxlaw]
+            [shiharai.jurisdiction :as juris]
             [shiharai.law :as law]
             [shiharai.store :as store]))
 
@@ -165,7 +197,20 @@
         pay (some->> (:payable proposal) (store/payable store))
         pmt (:payment proposal)
         claims? (true? (:payable/claims-input-tax-credit? pay))
-        juris (:payable/jurisdiction pay)]
+        ;; Renamed from `juris` when `shiharai.jurisdiction` took that alias.
+        ;; A local shadowing a namespace alias reads as the alias at a glance,
+        ;; which is how a call site ends up meaning something else.
+        jurisdiction (:payable/jurisdiction pay)
+        ;; taxlaw answers in three values and all three are kept.
+        ;; `:not-claimed` is this actor's own fourth: nothing was asserted, so
+        ;; nothing was checked, and that is different from a facet nobody
+        ;; catalogued.
+        tax (if-not claims?
+              {:taxlaw/coverage :not-claimed
+               :taxlaw/why "この payable は仕入税額控除を主張していない"}
+              (taxlaw/credit-support
+               jurisdiction
+               {:registration-number (:payable/registration-number pay)}))]
     {:supplier sup
      :payable pay
      :destination (store/destination-check
@@ -175,18 +220,22 @@
                     (store/outstanding store (:payable/id pay)
                                        (when (= :release-payment (:op proposal))
                                          (:payment/id pmt))))
-     ;; taxlaw answers in three values and all three are kept. `:not-claimed`
-     ;; is this actor's own fourth: nothing was asserted, so nothing was
-     ;; checked, and that is different from a jurisdiction nobody catalogued.
-     :tax (if-not claims?
-            {:taxlaw/coverage :not-claimed
-             :taxlaw/why "この payable は仕入税額控除を主張していない"}
-            (taxlaw/credit-support
-             juris {:registration-number (:payable/registration-number pay)}))
+     :tax tax
+     ;; What the catalog says it did NOT check about a registration number it
+     ;; nonetheless accepted. nil in Japan and nil on a refusal; a non-empty
+     ;; set in the EU on every accepted claim, because Article 215 gives the
+     ;; prefix and nothing else.
+     :registration-gap (juris/registration-gap tax)
+     ;; Reported, never enforced. This actor holds no fiscal-year end and no
+     ;; filing status, so it cannot compute a 起算日 — but it can say whether
+     ;; the instrument states a number at all, which is the part a caller
+     ;; would otherwise read out of a nil.
+     :retention (juris/retention jurisdiction)
      :preservation (when pay
                      (taxlaw/record-preservation
-                      juris {:origin (:payable/origin pay)
-                             :preservation (:payable/preservation pay)}))
+                      jurisdiction
+                      {:origin (:payable/origin pay)
+                       :preservation (:payable/preservation pay)}))
      :payment-terms (when pay (law/payment-term pay sup))
      :posting (redraft-posting store proposal)}))
 
@@ -202,6 +251,7 @@
         {sup :supplier pay :payable dest :destination fund :funding-account
          out :outstanding tax :tax pres :preservation terms :payment-terms
          redrafted :posting} a
+        jurisdiction (:payable/jurisdiction pay)
         existing (when id (store/payment store id))
         releasing? (= :release-payment op)]
     (gov/violations
@@ -346,16 +396,55 @@
               :detail (str "提案された仕訳が台帳から再作成した仕訳と一致しない。"
                            "再作成: " (pr-str (:ledger/entries redrafted)))})
 
-       ;; 20 / 21. 仕入税額控除
-       (= :none (:taxlaw/coverage tax))
+       ;; 20 / 20b / 21. 仕入税額控除
+       ;;
+       ;; Both `:none` cases are HARD and neither is overridable — the hold is
+       ;; identical. What differs is where the refusal sends the reader, and
+       ;; that is worth two rule names rather than one:
+       ;;
+       ;;   :unchecked-credit-jurisdiction  nobody has read an invoice rule
+       ;;                                   here. Somebody could go and read
+       ;;                                   one.
+       ;;   :credit-jurisdiction-out-of-scope
+       ;;                                   the facet was considered and
+       ;;                                   deliberately left out, and the
+       ;;                                   catalog says why. There is nothing
+       ;;                                   to go and read: the United States
+       ;;                                   has no federal VAT, so no federal
+       ;;                                   analogue of 適格請求書 exists.
+       ;;
+       ;; Sending an operator to read a law that does not exist is the same
+       ;; misattributed blame `store-unconfigured-response` refuses to commit
+       ;; one layer out.
+       (and (= :none (:taxlaw/coverage tax)) (nil? (:taxlaw/out-of-scope tax)))
        (conj {:rule :unchecked-credit-jurisdiction
               :detail (str "仕入税額控除を主張しているが、法域 "
-                           (pr-str (:payable/jurisdiction pay))
+                           (pr-str jurisdiction)
                            " は kotoba.taxlaw に無く判定できない（未検査は合格ではない）")})
+
+       (and (= :none (:taxlaw/coverage tax)) (some? (:taxlaw/out-of-scope tax)))
+       (conj {:rule :credit-jurisdiction-out-of-scope
+              :detail (str "仕入税額控除を主張しているが、法域 "
+                           (pr-str jurisdiction) " の "
+                           (pr-str (:taxlaw/out-of-scope tax))
+                           " は kotoba.taxlaw が意図的に読んでいない: "
+                           (:taxlaw/why tax)
+                           "。読まれていない法を読みに行かせても何も出てこない"
+                           "ので、:unchecked-credit-jurisdiction とは別の名前"
+                           "にしてある（保留の強さは同じ）")
+              :out-of-scope (:taxlaw/out-of-scope tax)
+              :why (:taxlaw/why tax)})
 
        (and (= :checked (:taxlaw/coverage tax)) (false? (:taxlaw/supported? tax)))
        (conj {:rule :input-tax-credit-unsupported
-              :detail (str "適格請求書発行事業者の登録番号が無いか不正（"
+              ;; The number's NAME is jurisdiction-specific and the reason is
+              ;; not. Calling an EU VAT identification number a 適格請求書発行
+              ;; 事業者の登録番号 would name a Japanese register that has no
+              ;; entry for a German supplier.
+              :detail (str (if (= [:jp] jurisdiction)
+                             "適格請求書発行事業者の登録番号"
+                             (str "法域 " (pr-str jurisdiction) " の登録番号"))
+                           "が無いか不正（"
                            (name (or (:taxlaw/reason tax) :unknown))
                            "）。この payable では仕入税額控除を主張できない: "
                            (pr-str (:payable/registration-number pay)))})
@@ -394,7 +483,8 @@
   at — so the reasons travel beside it rather than replacing it."
   [proposal a]
   (let [{:keys [op payment]} proposal
-        {dest :destination terms :payment-terms pay :payable} a]
+        {dest :destination terms :payment-terms pay :payable
+         gap :registration-gap} a]
     (cond-> []
       (contains? escalating-ops op)
       (conj {:rule :release-payment
@@ -404,6 +494,30 @@
       (= :unverified (:destination/coverage dest))
       (conj {:rule :unverified-destination
              :detail (:destination/why dest)})
+
+      ;; E6. The credit was accepted, and the catalog says how little it
+      ;; looked at. In the EU that is every accepted claim: Article 215 gives
+      ;; an ISO 3166 alpha-2 prefix and nothing else, so `XX1` satisfies the
+      ;; only format rule the Directive states.
+      ;;
+      ;; Neither a pass nor a hold, and for the same reason
+      ;; `:unverified-destination` is neither: an account under a scheme this
+      ;; repo has no validator for goes to a person, and so does a
+      ;; registration number under a format this repo can only half check.
+      ;; Approving it silently would put `:taxlaw/supported? true` in front of
+      ;; an approver who reads it as "the supplier's VAT number is valid" —
+      ;; which is not what was measured, and is the sentence they would
+      ;; believe.
+      (some? gap)
+      (conj {:rule :registration-format-partially-checked
+             :detail (str "登録番号は形式検査を通ったが、この catalog が"
+                          "実際に見たのは " (pr-str (:registration/checked gap))
+                          " だけで、" (pr-str (:registration/not-checked gap))
+                          " は見ていない（" (:registration/why gap)
+                          "）。この :supported? true は「登録番号が実在する」"
+                          "という意味ではないので、人が見る")
+             :checked (:registration/checked gap)
+             :not-checked (:registration/not-checked gap)})
 
       (law/boundary? terms)
       (conj {:rule :statutory-term-boundary
@@ -429,8 +543,9 @@
   "Assess a proposal against `request` / `context` / `proposal` and a `store`
   implementing `shiharai.store/Store`. Pure — never mutates the store.
 
-  Returns `gov/verdict`'s map plus `:tax`, `:preservation`, `:destination`,
-  `:payment-terms`, `:outstanding` and `:escalations`."
+  Returns `gov/verdict`'s map plus `:tax`, `:registration-gap`,
+  `:retention`, `:preservation`, `:destination`, `:payment-terms`,
+  `:outstanding` and `:escalations`."
   [request _context proposal store]
   (let [a (assessments request proposal store)
         esc (escalations proposal a)]
@@ -440,6 +555,8 @@
       :escalating-op? (boolean (seq esc))
       :confidence-floor confidence-floor
       :extra {:tax (:tax a)
+              :registration-gap (:registration-gap a)
+              :retention (:retention a)
               :preservation (:preservation a)
               :destination (:destination a)
               :payment-terms (:payment-terms a)

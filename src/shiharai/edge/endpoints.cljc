@@ -52,9 +52,14 @@
 
   ## Nothing here rounds a three-valued answer to two
 
-  A verdict carries `:tax`, `:preservation`, `:destination`,
-  `:payment-terms`, `:outstanding` and `:escalations`, and every one of them
-  rides out on the response. An unknown outstanding travels as `:unknown`
+  A verdict carries `:tax`, `:registration-gap`, `:retention`,
+  `:preservation`, `:destination`, `:payment-terms`, `:outstanding` and
+  `:escalations`, and every one of them rides out on the response.
+
+  `:retention` is the one worth naming here. `retention-years` is nil for the
+  EU, for the United States and for a jurisdiction nobody catalogued, and a
+  response that flattened those to a missing key would let a reader supply
+  the seven years the instruments do not state. An unknown outstanding travels as `:unknown`
   and not as `nil` — a nil crossing a JSON boundary becomes `null`, and a
   reader who treats `null` as 0 has turned \"nobody recorded this amount\"
   into \"this invoice is settled\". A payment nobody has a verdict for is
@@ -296,6 +301,14 @@
   [verdict]
   {:destination (:destination verdict)
    :tax (:tax verdict)
+   ;; What the catalog did NOT check about a registration number it accepted.
+   ;; Rides out beside `:tax` rather than inside it, because a reader who
+   ;; stops at `:taxlaw/supported? true` has to trip over this to be wrong —
+   ;; in the EU it is present on every accepted claim.
+   :registration-gap (:registration-gap verdict)
+   ;; Three-valued, and never an invented number. See
+   ;; `shiharai.jurisdiction/retention`.
+   :retention (:retention verdict)
    :preservation (:preservation verdict)
    :payment-terms (:payment-terms verdict)
    :outstanding (let [n (:outstanding verdict)] (if (int? n) n :unknown))
