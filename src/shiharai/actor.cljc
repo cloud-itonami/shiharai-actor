@@ -96,13 +96,25 @@
                       (when-let [p (:posting verdict)]
                         (store/commit-posting! store p))
                       (store/append-ledger! store {:disposition :commit
+                                                   :supplier-id (:supplier-id request)
+                                                   :payment-id (:payment/id pmt)
                                                    :record record
                                                    :verdict verdict})
                       {:record record
                        :audit [{:node :commit :record record}]})))
       (g/add-node :hold
-                  (fn [{:keys [verdict]}]
-                    (store/append-ledger! store {:disposition :hold :verdict verdict})
+                  ;; A hold is attributed to the same two identifiers a
+                  ;; commit is. A refusal nobody can attribute is a refusal
+                  ;; nobody can be shown: without these, the only queryable
+                  ;; ledger is the one of things that went through, and a
+                  ;; reader asking "what happened to pay-2" gets silence
+                  ;; whether it was held or never proposed.
+                  (fn [{:keys [request proposal verdict]}]
+                    (store/append-ledger! store
+                                          {:disposition :hold
+                                           :supplier-id (:supplier-id request)
+                                           :payment-id (get-in proposal [:payment :payment/id])
+                                           :verdict verdict})
                     {:audit [{:node :hold :verdict verdict}]}))
       (g/set-entry-point :intake)
       (g/add-edge :intake :advise)

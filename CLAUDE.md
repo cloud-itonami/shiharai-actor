@@ -59,11 +59,71 @@ schedules for the full amount would both pass and the duplicate would only
 surface after a human had approved the second one. `:duplicate-payment` has
 no approval route.
 
+## Store and edge
+
+`MemStore` ≡ `DatomicStore` — same protocol, same contract test; **write both
+sides of any store change**, and add its assertion to
+`test/shiharai/store_contract_test.clj` in the same commit. The contract test
+is not decoration here: the committed-payment set is what `:duplicate-payment`
+is enforced against, so a backend that answered it differently would not make
+the hold fail, it would leave the hold with nothing to be true about.
+
+**Do not call the journalled store durable.** `datomic-store` takes
+langchain.db's `{:append :read}` persistence port; the host on the other side
+of it is what is or is not durable, and this repo cannot see that host. The
+edge reports `:persistence :delegated`, never `:durable`. A journal held in
+memory by a worker about to be evicted is still a journal.
+
+**A multi-value read is sorted.** `accounts` / `payables-of` / `payments` /
+`payments-for` sort by id on both backends. A read whose order is whatever the
+backend's map iteration produced is a read two deployments answer differently.
+
+The surface is four functions and **no fifth**: register a payable, propose a
+payment, read a verdict, read the ledger. Releasing, approving and resuming
+have no HTTP representation and must not acquire one. Concretely, do not
+change these:
+
+- the op in `propose-payment-core!` is a **constant**, not a field. Read it
+  out of the body and a request can reach the release path;
+- the graph is built **per request**, so no interrupted thread outlives the
+  response. Hoist the checkpointer and approval becomes an HTTP call;
+- an escalation is **202**, which is neither of its neighbours;
+- `caller-did` arrives already verified. Do not add a verifier — that means a
+  key — and do not add a Cloudflare/`js/Response` entry point here.
+
+An absent allow-list serves **503**. An unset `SHIHARAI_STORE` serves **503**
+too — refusing beats returning `:no-supplier` and blaming the caller for a
+storeless deployment.
+
+The supplier comes from the DID, always. A body that names one is a **400**,
+never a silent substitution: ignoring it is how a caller comes to believe they
+registered an invoice against a supplier they never touched.
+
+An existing payable id is **refused, not overwritten**. Upsert is right for an
+operator correcting a record and wrong for an endpoint — it moves the ceiling
+`:overpayment` and `:duplicate-payment` are measured against, under payments
+that may already be scheduled.
+
+## The ceiling is a test, not a sentence
+
+`test/shiharai/ceiling_test.clj` reads every `ns` form under `src/` and
+compares its requires against an allow-list, then scans for host escapes that
+need no dependency. **Adding a dependency means adding it to
+`permitted-requires` with the sentence saying why it cannot reach a network.**
+`kotoba.banking.api` is not on that list and must not be added.
+
+Both halves assert a floor on how many files they read. Do not remove those
+assertions: a scanner pointed at an empty directory reports the same clean
+result as a clean repository.
+
 ## deps.edn
 
-**Zero `:local/root`, ever.** Git coordinates only. Verify by running the
-suite from a directory with no sibling checkouts — that is both what a fork
-gets and what a murakumo fleet gate ships.
+**Zero `:local/root`, ever.** Git coordinates only, transitively. Verify by
+**reading the file as EDN**, not by grepping it — `langchain-store`'s own
+`deps.edn` discusses a `:local/root` it no longer has, so `grep` answers yes
+and the reader answers no. Then run the suite from a fresh clone with no
+sibling checkouts, which is both what a fork gets and what a murakumo fleet
+gate ships.
 
 ## Test — including that the tests can fail
 

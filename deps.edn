@@ -36,7 +36,19 @@
         ;; StateGraph + checkpointing, so `:release-payment` interrupts
         ;; before a human resumes the thread.
         io.github.kotoba-lang/langgraph
-        {:git/sha "5b4e5e70837b849b14b6a5800894e3be202ad5fa"}}
+        {:git/sha "5b4e5e70837b849b14b6a5800894e3be202ad5fa"}
+
+        ;; The shared `langchain.db` store seam (EDN-blob codec, identity
+        ;; schema, seq-keyed event streams) behind `DatomicStore`
+        ;; — ADR-2607141600. Its own `deps.edn` has ZERO `:local/root`
+        ;; (checked by READING it as EDN, not by grepping it: that file
+        ;; discusses a `:local/root` it no longer has, so a grep answers
+        ;; yes and the reader answers no), and its one transitive dep,
+        ;; io.github.com-junkawasaki/langchain-clj, is a git coordinate
+        ;; too. The whole chain therefore resolves in a bare clone.
+        io.github.kotoba-lang/langchain-store
+        {:git/url "https://github.com/kotoba-lang/langchain-store.git"
+         :git/sha "b986669f72276568c97e1fa5b331a5ff3017bf69"}}
 
  :aliases
  {:test {:extra-paths ["test"]

@@ -200,4 +200,169 @@
   :invariant "the graph's router tests :hard? before :escalate?"
   :file "src/shiharai/actor.cljc"
   :find "(cond hard? :hold\n        escalate? :request-approval"
-  :replace "(cond escalate? :request-approval\n        hard? :hold"}]
+  :replace "(cond escalate? :request-approval\n        hard? :hold"}
+
+ ;; ---------------------------------------------------------------------
+ ;; The second store backend, and the contract that says the two agree
+ ;; ---------------------------------------------------------------------
+
+ {:id :payment-identity-in-the-durable-store
+  :invariant "re-committing a payment id UPSERTS rather than forking"
+  :file "src/shiharai/store.cljc"
+  :find "[:supplier/id :account/id :payable/id :payment/id"
+  :replace "[:supplier/id :account/id :payable/id"}
+
+ {:id :payable-identity-in-the-durable-store
+  :invariant "re-registering a payable id replaces rather than forks it"
+  :file "src/shiharai/store.cljc"
+  :find ":payable/id :payment/id\n                       :posting/seq"
+  :replace ":payment/id\n                       :posting/seq"}
+
+ {:id :journal-is-replayed-on-open
+  :invariant "a store opened over a journal rebuilds from it"
+  :file "src/shiharai/store.cljc"
+  :find "([persist] (->DatomicStore (d/create-conn schema persist))))"
+  :replace "([persist] (->DatomicStore (d/create-conn schema)))) ;; persist ignored"}
+
+ {:id :journal-is-appended-to
+  :invariant "a write reaches the journal, not only the connection"
+  :file "src/shiharai/store.cljc"
+  :find "{:append (fn [event] (swap! a conj event) event)"
+  :replace "{:append (fn [event] event)"}
+
+ ;; NOTE on this one. Its first form was
+ ;;   :replace "(defn- next-seq [conn seq-attr]\n  (* 0 (count"
+ ;; which leaves an unbalanced paren: the file stopped READING, the suite
+ ;; printed no summary, and the harness scored it killed because the exit
+ ;; code was non-zero. Zero tests had reddened. A mutation that breaks the
+ ;; reader proves the reader works, not that the invariant is measured —
+ ;; exactly the "wrongly-broken red looks like a successful demonstration"
+ ;; failure CLAUDE.md names. The form below is balanced and pins the
+ ;; sequence at 0, so every append upserts over the last one.
+ {:id :stream-seq-advances
+  :invariant "an append goes to the NEXT sequence number, not over the last"
+  :file "src/shiharai/store.cljc"
+  :find "  (count (d/q [:find '?e :where ['?e seq-attr '_]] (d/db conn))))"
+  :replace "  (min 0 (count (d/q [:find '?e :where ['?e seq-attr '_]] (d/db conn)))))"}
+
+ {:id :collection-reads-are-ordered
+  :invariant "a multi-value read has a defined order, not the backend's accident"
+  :file "src/shiharai/store.cljc"
+  :find "(accounts [_] (vec (sort-by :account/id (vals (:accounts @a)))))"
+  :replace "(accounts [_] (vec (reverse (sort-by :account/id (vals (:accounts @a))))))"}
+
+ {:id :a-hold-is-attributed
+  :invariant "a refusal records whose it was and what it was about"
+  :file "src/shiharai/actor.cljc"
+  :find "{:disposition :hold\n                                           :supplier-id (:supplier-id request)"
+  :replace "{:disposition :hold\n                                           :supplier-id nil"}
+
+ ;; ---------------------------------------------------------------------
+ ;; The edge surface
+ ;; ---------------------------------------------------------------------
+
+ {:id :edge-absent-allowlist-is-503
+  :invariant "an absent allow-list refuses; it does not open the endpoint"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "    (nil? allowlist)\n    {:status 503"
+  :replace "    (= ::never allowlist)\n    {:status 503"}
+
+ {:id :edge-unlisted-caller-is-403
+  :invariant "a verified caller still has to be on the allow-list"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "(nil? (supplier-for allowlist caller-did))"
+  :replace "(= ::never (supplier-for allowlist caller-did))"}
+
+ {:id :edge-body-may-not-name-a-supplier
+  :invariant "the supplier is derived from the caller, never claimed"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "#{:supplier-id :supplier :payable/supplier})"
+  :replace "#{})"}
+
+ {:id :edge-op-is-a-constant
+  :invariant "no request body can reach the release path"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "                                         :op :schedule-payment\n"
+  :replace "                                         :op (or (:op body) :schedule-payment)\n"}
+
+ {:id :edge-escalation-is-not-a-success
+  :invariant "a payment a human must decide is not reported as scheduled"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "              :request-approval\n              {:status 202"
+  :replace "              :request-approval\n              {:status 200"}
+
+ {:id :edge-payable-is-not-overwritten
+  :invariant "an endpoint does not move a payable's amount under a scheduled payment"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "          (some? (store/payable store payable-id))"
+  :replace "          (some? nil)"}
+
+ {:id :edge-supplier-must-be-registered
+  :invariant "a payable is not registered against a supplier nobody registered"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "          (nil? (store/supplier store supplier-id))"
+  :replace "          (= ::never (store/supplier store supplier-id))"}
+
+ {:id :edge-amount-must-be-a-positive-integer
+  :invariant "an amount that is not one is refused, not coerced"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "          (and (some? amount) (not (and (int? amount) (pos? amount))))"
+  :replace "          (and (some? amount) false)"}
+
+ {:id :edge-unknown-outstanding-is-not-zero
+  :invariant "nil crossing the response boundary is :unknown, not 0"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "  (let [n (store/outstanding store payable-id)]\n    (if (int? n) n :unknown)))"
+  :replace "  (let [n (store/outstanding store payable-id)]\n    (if (int? n) n 0)))"}
+
+ {:id :edge-unknown-verdict-is-not-a-pass
+  :invariant "a payment nobody asked about is 404 :unknown, not an empty 200"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "              {:status 404\n               :body {:ok false\n                      :verdict :unknown"
+  :replace "              {:status 200\n               :body {:ok true\n                      :verdict :unknown"}
+
+ {:id :edge-malformed-id-is-not-a-miss
+  :invariant "a malformed payment id is 400, not 404"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "  (when (and (string? x) (seq (.trim x))) x))"
+  :replace "  (and (string? x) (seq (.trim x)) x))"}
+
+ {:id :edge-verdict-is-scoped-to-the-caller
+  :invariant "another supplier's payment id is not readable"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "                                     (entries-for-supplier store supplier-id)))]"
+  :replace "                                     (store/ledger store)))]"}
+
+ {:id :edge-ledger-is-scoped-to-the-caller
+  :invariant "the ledger endpoint shows this supplier's entries and no others"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "            mine (filterv #(= supplier-id (:supplier-id %)) all)]"
+  :replace "            mine (vec all)]"}
+
+ {:id :edge-reports-what-it-could-not-attribute
+  :invariant "a filtered view says when it is incomplete"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find ":unattributed (count (filterv #(nil? (:supplier-id %)) all))"
+  :replace ":unattributed 0"}
+
+ {:id :edge-store-mode-rejects-a-typo
+  :invariant "a misspelt deployment variable selects no mode at all"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "    \"journalled\" :journalled\n"
+  :replace "    \"journalled\" :journalled\n    \"journaled\" :journalled\n"}
+
+ {:id :edge-journalled-is-not-called-durable
+  :invariant "this repo does not vouch for a host it cannot see"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "    :journalled :delegated"
+  :replace "    :journalled :durable"}
+
+ ;; ---------------------------------------------------------------------
+ ;; The ceiling, checked rather than claimed
+ ;; ---------------------------------------------------------------------
+
+ {:id :ceiling-permits-only-known-dependencies
+  :invariant "a dependency that could reach a host fails the build"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "  (:require [shiharai.actor :as actor]"
+  :replace "  (:require [clojure.java.io]\n            [shiharai.actor :as actor]"}]
