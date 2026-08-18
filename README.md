@@ -45,6 +45,7 @@ Concretely, and checkably:
 | the strongest thing `:commit` writes | a map with `:payment/status :authorised` |
 | `:effect` the advisor may emit | `:propose`, and only that — `governor.core/no-actuation` holds anything else |
 | the hand-off to the books | `shiharai.shiwake` **returns a value**. It has no client and no transport, and its `:require` list is pinned to `#{clojure.string}` by a test — a call arrives either as a host escape or as a dependency, and both doors are shut. See "仕訳 — the hand-off to the books" |
+| the answer coming back | `shiharai.handoff` is handed a reply somebody else obtained and turns it into a ledger fact. Same pinned `:require` list, same scan. Recording what the ledger did does not require being the thing that asked it. See "受領確認 — what the ledger did with the entry" |
 | what the HTTP surface can reach | scheduling, and nothing past it. The op is a **constant** in `propose-payment-core!`, not a field, so no body asks for a release; an escalation returns 202 and stops; and there is no function on that surface that resumes an interrupted thread |
 
 > An earlier version of this table claimed `grep -r "http\|fetch\|slurp" src/`
@@ -414,6 +415,74 @@ thereby a 原始証憑 the ledger knows.
 
 ---
 
+## 受領確認 — what the ledger did with the entry
+
+**Converted is not posted.** `shiwake` produces the request; nothing recorded
+what happened to it. 4311 can commit the entry, find it already there, hold it
+against a rule, park it for a human, or refuse the body — and from this side
+all five arrived as the same nothing.
+
+That is the defect one layer up from the one `shiwake` exists for, and it has
+the same shape: no error message, both actors reporting a clean run, the books
+short by one disbursement. A payment converted, submitted and *refused* was
+indistinguishable from one that posted.
+
+`handoff/fact` turns one reply into a `shiharai.store/ledger` fact the actor
+appends with the `append-ledger!` it already has — no new store call, no new
+schema, beside the graph's own `:commit` and `:hold` facts.
+
+| reply | `:handoff/outcome` |
+|---|---|
+| 200, `:duplicate? false` | `:posted` |
+| 200, `:duplicate? true` | `:duplicate` — **not** `:posted`. One call wrote the posting; the other found it already there, and on this side of the books that is the difference between a disbursement recorded once and one recorded twice |
+| 202 | `:awaiting-approval`, with the escalation reason |
+| 409 | `:held`, with the violations |
+| 400 | `:rejected` — the body this actor emitted |
+| 403 | `:not-permitted` — who it authenticated as |
+| 503 | `:unavailable` — a ledger deployment with no store and no allow-list |
+| anything else, a body that is not a map, or a 200 that does not say whether it duplicated | `:unreadable`, carrying the whole reply |
+
+**The good outcome is recorded too.** A ledger holding only refusals cannot
+answer 「これは計上されたか」, which is the one question the hand-off exists to
+close.
+
+400/403/503 stay three answers where 4311's own batch collapses them into
+`:rejected`, because they send a reader to three different places. That is the
+argument the ledger actor already makes about its own 503: misattributed blame
+sends an operator to look at their own registration while the fault is
+elsewhere.
+
+**Every fact names the payable, the payment id and the supplier**, plus the
+ledger's posting id where there is one. The payable is the join key the entry
+itself carries; **the payment id is the one the entry cannot carry**, because
+`draft-entry-core!` drops everything but `:source-doc` and `:lines` — so this
+side keeps it, at the only point in the hand-off where nothing drops it.
+`:handoff/posting` is present even when nil.
+
+**The status is what says whether something was submitted**, not the presence
+of a request-shaped map: a `shiwake` refusal carrying a stale request scores
+`:not-submitted`, never an outcome.
+
+`handoff/facts` does the batch. Results join to entries **by position only**,
+so a length mismatch is refused rather than zipped — one missing result
+misattributes every outcome after it while the entries that fall off the end
+get none at all. A result echoing a different `:source-doc` is
+`:misattributed` for the same reason, and a batch result whose status and
+`:outcome` disagree is `:unreadable`: reading `:outcome` alone would let a 500
+arrive labelled `:posted`, and reading the status alone would lose the
+posted/duplicate distinction, which a batch result carries nowhere else.
+
+**A refused batch still returns one fact.** Returning none would mean a caller
+looping over them wrote nothing, and a failed hand-off would look exactly like
+a hand-off nobody attempted — the defect this namespace exists to remove,
+reproduced by the namespace itself.
+
+Same ceiling as `shiwake`: two public functions and two vocabularies, requires
+pinned to `#{clojure.string}`, scanned for call shapes by a test that reads its
+own source, and on `ceiling_test.clj`'s allow-list like everything else.
+
+---
+
 ## Measured
 
 Run 2026-08-18 from a fresh `git clone` into `/tmp`, with an empty dependency
@@ -424,7 +493,7 @@ satisfied one:
 ```
 $ git clone …/shiharai-actor.git /tmp/shiharai-fresh && cd /tmp/shiharai-fresh
 $ CLJ_CACHE=…/cache GITLIBS=…/gitlibs clojure -M:test
-Ran 146 tests containing 899 assertions.
+Ran 165 tests containing 1116 assertions.
 0 failures, 0 errors.
 
 $ CLJ_CACHE=…/cache GITLIBS=…/gitlibs clojure -M:lint
@@ -436,9 +505,10 @@ io.github.cognitect-labs  io.github.com-junkawasaki  io.github.kotoba-lang
 
 The iteration that added the second store backend and the surface took the
 suite from **68 tests / 373 assertions** to 130 / 792; the 仕訳 hand-off took
-it to **146 / 899**.
+it to 146 / 899; recording what the ledger did with the entry took it to
+**165 / 1116**.
 
-### The tests can fail — 74 mutations, 74 killed, 0 survived, 0 unmeasured
+### The tests can fail — 92 mutations, 92 killed, 0 survived, 0 unmeasured
 
 A test that has never gone red is a test nobody has measured. `tools/mutate.cljs`
 applies one single-token mutation from `tools/mutations.edn`, runs the suite,
@@ -448,13 +518,13 @@ a comment produces a red suite that proves nothing.
 
 ```
 $ nbb tools/check-mutations.cljs
-SCANNED	74 mutations
+SCANNED	92 mutations
 all find strings occur exactly once
 
 $ nbb tools/mutate.cljs
-baseline: Ran 146 tests containing 899 assertions. GREEN
+baseline: Ran 165 tests containing 1116 assertions. GREEN
 ...
-=== 74 mutations, 74 killed, 0 survived, 0 unmeasured
+=== 92 mutations, 92 killed, 0 survived, 0 unmeasured
 ```
 
 **`0 unmeasured` is a new column, and it is there because the harness scored
@@ -550,6 +620,25 @@ thing reported have to be the same thing*, and a tally cannot tell you that.
 | `:shiwake-batch-ok-is-only-the-ok` | a refusal does not travel in the `:ok` half | 2 |
 | `:shiwake-a-refusal-carries-the-record-it-refused` | a refusal nobody can attribute is one nobody can act on | 2 |
 | `:shiwake-reaches-nothing` | it produces a value; it makes no call | 2 |
+| **受領確認 — what the ledger did with the entry** | | |
+| `:handoff-good-outcome-recorded` | a posted entry is recorded, not lost | 5 |
+| `:handoff-duplicate-is-not-posted` | **one call wrote it; the other found it already there** | 2 |
+| `:handoff-silent-200-is-not-a-post` | a 200 that will not say which is not a claim that it wrote | 1 |
+| `:handoff-unknown-status-is-not-a-success` | an unreadable reply never becomes a success | 1 |
+| `:handoff-deployment-refusals-stay-three` | 400/403/503 send a reader to three different places | 2 |
+| `:handoff-unreadable-carries-the-reply` | an unreadable reply keeps enough of itself to be diagnosed | 1 |
+| `:handoff-fact-names-the-payable` | a record that cannot be joined back is not a reconciliation | 4 |
+| `:handoff-fact-names-the-payment` | **the id the entry body cannot carry is kept here** | 3 |
+| `:handoff-fact-names-the-supplier` | the actor's own ledger stamps it; so does this | 2 |
+| `:handoff-posting-key-always-present` | a key that vanishes when the answer is interesting | 3 |
+| `:handoff-unsubmitted-is-not-scored` | the STATUS says whether it was submitted, not a stale request | 1 |
+| `:handoff-unsubmitted-is-not-scored-in-a-batch` | the same, on the batch side | 1 |
+| `:handoff-length-mismatch-refused` | **results join by position; a mismatch is refused, not zipped** | 3 |
+| `:handoff-refusal-is-itself-a-fact` | a failed hand-off must not look like one nobody attempted | 4 |
+| `:handoff-misattribution-refused` | an outcome on the wrong payable reads as an answer | 1 |
+| `:handoff-batch-status-and-outcome-must-agree` | `:outcome` alone lets a 500 arrive labelled `:posted` | 1 |
+| `:handoff-missing-results-is-not-an-empty-batch` | "none answered" ≠ "zero submitted" | 1 |
+| `:handoff-reaches-nothing` | it records a value; it makes no call | 2 |
 
 `:scheduled-consumes-balance` reddening 22 tests is not padding: `:scheduled`
 ceasing to consume the balance is the single change that would let the same

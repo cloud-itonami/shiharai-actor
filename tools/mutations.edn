@@ -480,4 +480,116 @@
   :invariant "the hand-off produces a value and makes no call"
   :file "src/shiharai/shiwake.cljc"
   :find "  (:require [clojure.string :as str]))"
+  :replace "  (:require [clojure.java.io]\n            [clojure.string :as str]))"}
+
+ ;; --------------------------------------------------------------------
+ ;; shiharai.handoff — what the ledger DID with the entry
+ ;; --------------------------------------------------------------------
+
+ {:id :handoff-good-outcome-recorded
+  :invariant "a posted entry is recorded as posted, not lost"
+  :file "src/shiharai/handoff.cljc"
+  :find "(not (true? (:ok body))) :unreadable"
+  :replace "(not (false? (:ok body))) :unreadable"}
+
+ {:id :handoff-duplicate-is-not-posted
+  :invariant "a duplicate is its own outcome; one wrote, one confirmed"
+  :file "src/shiharai/handoff.cljc"
+  :find "(true? (:duplicate? body)) :duplicate"
+  :replace "(true? (:duplicate? body)) :posted"}
+
+ {:id :handoff-silent-200-is-not-a-post
+  :invariant "a 200 that does not say whether it duplicated is unreadable"
+  :file "src/shiharai/handoff.cljc"
+  :find "(false? (:duplicate? body)) :posted"
+  :replace ":else :posted"}
+
+ {:id :handoff-unknown-status-is-not-a-success
+  :invariant "a status nobody here knows never becomes a success"
+  :file "src/shiharai/handoff.cljc"
+  :find "      503 :unavailable\n      :unreadable)))"
+  :replace "      503 :unavailable\n      :posted)))"}
+
+ {:id :handoff-deployment-refusals-stay-three
+  :invariant "400, 403 and 503 send a reader to three different places"
+  :file "src/shiharai/handoff.cljc"
+  :find "      403 :not-permitted\n      503 :unavailable\n"
+  :replace "      403 :rejected\n      503 :rejected\n"}
+
+ {:id :handoff-unreadable-carries-the-reply
+  :invariant "an unreadable reply keeps enough of itself to be diagnosed"
+  :file "src/shiharai/handoff.cljc"
+  :find "(= :unreadable outcome) (assoc :handoff/response response\n                                   :handoff/raw-status status)"
+  :replace "(= :unreadable outcome) (assoc :handoff/raw-status status)"}
+
+ {:id :handoff-fact-names-the-payable
+  :invariant "the fact joins back to the payable the entry cites"
+  :file "src/shiharai/handoff.cljc"
+  :find "{:handoff/payable (get-in converted [:shiwake/request :source-doc])"
+  :replace "{:handoff/payable (get-in converted [:shiwake/request :not-a-key])"}
+
+ {:id :handoff-fact-names-the-payment
+  :invariant "the payment id the entry body cannot carry is kept here"
+  :file "src/shiharai/handoff.cljc"
+  :find "   :handoff/payment-id (:shiwake/payment-id converted)"
+  :replace "   :handoff/payment-id (:shiwake/no-such-key converted)"}
+
+ {:id :handoff-fact-names-the-supplier
+  :invariant "the supplier the actor's own ledger stamps is stamped here too"
+  :file "src/shiharai/handoff.cljc"
+  :find "   :handoff/supplier-id (get-in converted [:shiwake/record :supplier-id])"
+  :replace "   :handoff/supplier-id (get-in converted [:shiwake/record :not-a-key])"}
+
+ {:id :handoff-posting-key-always-present
+  :invariant "the ledger's posting id is reported even when there is none"
+  :file "src/shiharai/handoff.cljc"
+  :find ":handoff/posting (when (map? body) (:posting body))}"
+  :replace ":handoff/no-posting (when (map? body) (:posting body))}"}
+
+ {:id :handoff-unsubmitted-is-not-scored
+  :invariant "a reply is never attributed to an entry nobody sent"
+  :file "src/shiharai/handoff.cljc"
+  :find "      (not= :ok (:shiwake/status converted))\n      (not-submitted converted response"
+  :replace "      (and false (:shiwake/status converted))\n      (not-submitted converted response"}
+
+ {:id :handoff-unsubmitted-is-not-scored-in-a-batch
+  :invariant "a batch result is never attributed to an entry nobody sent"
+  :file "src/shiharai/handoff.cljc"
+  :find "      (or (not= :ok (:shiwake/status converted)) (absent? payable))"
+  :replace "      (or (and false (:shiwake/status converted)) (absent? payable))"}
+
+ {:id :handoff-length-mismatch-refused
+  :invariant "a batch whose counts differ is refused, not zipped"
+  :file "src/shiharai/handoff.cljc"
+  :find "      (not= (count converted) (count results))"
+  :replace "      (and false (count results))"}
+
+ {:id :handoff-refusal-is-itself-a-fact
+  :invariant "a refused batch still yields one fact to append"
+  :file "src/shiharai/handoff.cljc"
+  :find ":handoff/facts [f]"
+  :replace ":handoff/facts []"}
+
+ {:id :handoff-misattribution-refused
+  :invariant "a result citing another document is not attributed here"
+  :file "src/shiharai/handoff.cljc"
+  :find "(and (some? echoed) (not= echoed payable))"
+  :replace "(and false (not= echoed payable))"}
+
+ {:id :handoff-batch-status-and-outcome-must-agree
+  :invariant "a batch result's status and the ledger's own label must agree"
+  :file "src/shiharai/handoff.cljc"
+  :find "(if (and permitted (contains? permitted outcome))"
+  :replace "(if (or permitted (contains? permitted outcome))"}
+
+ {:id :handoff-missing-results-is-not-an-empty-batch
+  :invariant "a reply with no :results is unreadable, not zero entries"
+  :file "src/shiharai/handoff.cljc"
+  :find "(not (sequential? results))"
+  :replace "(and false results)"}
+
+ {:id :handoff-reaches-nothing
+  :invariant "recording an outcome produces a value and makes no call"
+  :file "src/shiharai/handoff.cljc"
+  :find "  (:require [clojure.string :as str]))"
   :replace "  (:require [clojure.java.io]\n            [clojure.string :as str]))"}]
