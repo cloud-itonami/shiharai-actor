@@ -365,4 +365,119 @@
   :invariant "a dependency that could reach a host fails the build"
   :file "src/shiharai/edge/endpoints.cljc"
   :find "  (:require [shiharai.actor :as actor]"
-  :replace "  (:require [clojure.java.io]\n            [shiharai.actor :as actor]"}]
+  :replace "  (:require [clojure.java.io]\n            [shiharai.actor :as actor]"}
+
+ ;; ---------------------------------------------------------------------
+ ;; 仕訳 — the hand-off to the ledger. Every mutation here is a way a
+ ;; payment that really happened stops becoming a journal entry, or becomes
+ ;; the wrong one. None of them makes anything go red on its own: that is
+ ;; the whole reason the seam needed measuring.
+ ;; ---------------------------------------------------------------------
+
+ {:id :shiwake-unauthorised-is-its-own-status
+  :invariant "a payment that was not authorised is a named refusal"
+  :file "src/shiharai/shiwake.cljc"
+  :find "      (not= :commit disposition)"
+  :replace "      (= :never-a-disposition disposition)"}
+
+ ;; The first version of this one was a SURVIVOR, and the harness was right:
+ ;; it widened a check that `(= :scheduled status)` already shadowed, so
+ ;; nothing was broken and nothing should have gone red. The code was
+ ;; restructured to test `postable-statuses` FIRST, which is what makes the
+ ;; set the only thing deciding what posts — and therefore the only thing
+ ;; that can be widened wrongly.
+ {:id :shiwake-only-an-authorised-payment-posts
+  :invariant "a scheduled payment is a commitment, not a settlement"
+  :file "src/shiharai/shiwake.cljc"
+  :find "  #{:authorised})"
+  :replace "  #{:authorised :scheduled})"}
+
+ {:id :shiwake-scheduled-has-its-own-name
+  :invariant "`wait for approval` is a different instruction from `look at this`"
+  :file "src/shiharai/shiwake.cljc"
+  :find "      (= :scheduled status)"
+  :replace "      (= :scheduled :never-this-status)"}
+
+ {:id :shiwake-unknown-status-is-not-approval-pending
+  :invariant "an unreadable status is not called `awaiting approval`"
+  :file "src/shiharai/shiwake.cljc"
+  :find "      {:shiwake/status :unknown-payment-status\n"
+  :replace "      {:shiwake/status :not-released\n"}
+
+ {:id :shiwake-no-suspense-account
+  :invariant "an unmapped supplier does not fall back to a suspense account"
+  :file "src/shiharai/shiwake.cljc"
+  :find "            liability (get-in mapping [:suppliers supplier-id])"
+  :replace "            liability (or (get-in mapping [:suppliers supplier-id]) \"仮払金\")"}
+
+ {:id :shiwake-half-a-mapping-is-no-mapping
+  :invariant "an entry missing one line balances by having lost it"
+  :file "src/shiharai/shiwake.cljc"
+  :find "          (or (absent? liability) (absent? cash))"
+  :replace "          (and (absent? liability) (absent? cash))"}
+
+ {:id :shiwake-amount-is-a-positive-integer-of-minor-units
+  :invariant "the ledger's parser takes any number?, so this one does not"
+  :file "src/shiharai/shiwake.cljc"
+  :find "  (and (int? x) (pos? x)))"
+  :replace "  (number? x))"}
+
+ {:id :shiwake-currency-must-be-declared
+  :invariant "an amount with no unit is not an amount"
+  :file "src/shiharai/shiwake.cljc"
+  :find "              (absent? currency)"
+  :replace "              false"}
+
+ {:id :shiwake-a-document-must-be-cited
+  :invariant "an entry citing nothing is a transaction nobody can trace"
+  :file "src/shiharai/shiwake.cljc"
+  :find "              (absent? payable))"
+  :replace "              (false? payable))"}
+
+ {:id :shiwake-the-payment-discharges-a-liability
+  :invariant "Dr the liability, Cr the cash — not two credits, not an expense"
+  :file "src/shiharai/shiwake.cljc"
+  :find "            :lines [{:side :dr :account liability"
+  :replace "            :lines [{:side :cr :account liability"}
+
+ {:id :shiwake-every-line-carries-its-currency
+  :invariant "the ledger groups by currency before comparing"
+  :file "src/shiharai/shiwake.cljc"
+  :find "{:side :cr :account cash      :amount amount-minor :currency currency}"
+  :replace "{:side :cr :account cash      :amount amount-minor}"}
+
+ {:id :shiwake-the-payable-is-the-source-document
+  :invariant "the invoice is cited, not the payment that settled it"
+  :file "src/shiharai/shiwake.cljc"
+  :find "            :source-doc payable"
+  :replace "            :source-doc (:payment/id pmt)"}
+
+ {:id :shiwake-request-carries-only-what-the-ledger-reads
+  :invariant "a field that endpoint drops is not smuggled into the body"
+  :file "src/shiharai/shiwake.cljc"
+  :find "           {:op :draft-entry\n"
+  :replace "           {:op :draft-entry\n            :payment-id (:payment/id pmt)\n"}
+
+ {:id :shiwake-batch-keeps-what-it-could-not-convert
+  :invariant "a batch that filtered would report a clean run"
+  :file "src/shiharai/shiwake.cljc"
+  :find "     :skipped (vec (remove #(= :ok (:shiwake/status %)) rs))}))"
+  :replace "     :skipped []}))"}
+
+ {:id :shiwake-batch-ok-is-only-the-ok
+  :invariant "a refusal does not travel in the :ok half"
+  :file "src/shiharai/shiwake.cljc"
+  :find "    {:ok (vec (filter #(= :ok (:shiwake/status %)) rs))"
+  :replace "    {:ok (vec rs)"}
+
+ {:id :shiwake-a-refusal-carries-the-record-it-refused
+  :invariant "a refusal nobody can attribute is a refusal nobody can act on"
+  :file "src/shiharai/shiwake.cljc"
+  :find "(assoc (entry-request % mapping) :shiwake/record %)"
+  :replace "(entry-request % mapping)"}
+
+ {:id :shiwake-reaches-nothing
+  :invariant "the hand-off produces a value and makes no call"
+  :file "src/shiharai/shiwake.cljc"
+  :find "  (:require [clojure.string :as str]))"
+  :replace "  (:require [clojure.java.io]\n            [clojure.string :as str]))"}]
