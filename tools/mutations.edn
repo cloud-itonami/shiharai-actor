@@ -130,11 +130,16 @@
   :find "(not= (:ledger/entries posting) (:ledger/entries redrafted))"
   :replace "(not= 1 1)"}
 
+ ;; RETARGETED 2026-08-18, not deleted. `(= :none (:taxlaw/coverage tax))`
+ ;; stopped occurring exactly once when the rule split into an uncatalogued
+ ;; branch and an out-of-scope branch, and the harness refuses an ambiguous
+ ;; find. The invariant is unchanged — taxlaw's :none is not a pass — and now
+ ;; needs one mutation per branch: this one, and :us-hold-is-dropped below.
  {:id :unchecked-credit-jurisdiction
-  :invariant "taxlaw's :none is not a pass"
+  :invariant "taxlaw's :none is not a pass (uncatalogued branch)"
   :file "src/shiharai/governor.cljc"
-  :find "(= :none (:taxlaw/coverage tax))"
-  :replace "(= :nope (:taxlaw/coverage tax))"}
+  :find "       (and (= :none (:taxlaw/coverage tax)) (nil? (:taxlaw/out-of-scope tax)))"
+  :replace "       (and (= :nope (:taxlaw/coverage tax)) (nil? (:taxlaw/out-of-scope tax)))"}
 
  {:id :credit-unsupported
   :invariant "a claimed credit needs a valid 登録番号"
@@ -592,4 +597,154 @@
   :invariant "recording an outcome produces a value and makes no call"
   :file "src/shiharai/handoff.cljc"
   :find "  (:require [clojure.string :as str]))"
-  :replace "  (:require [clojure.java.io]\n            [clojure.string :as str]))"}]
+  :replace "  (:require [clojure.java.io]\n            [clojure.string :as str]))"}
+
+ ;; --- non-JP jurisdictions (taxlaw d2663b5, per-facet coverage) ------------
+ ;; Written from the SOURCE, one per decision point, before the tests for them
+ ;; were consulted. Two of these are the ones that matter: :us-hold-is-dropped
+ ;; makes a United States payable payable, and :eu-partial-format-passes
+ ;; schedules a payment on the string "XX1".
+
+ {:id :us-hold-is-dropped
+  :invariant "a payable whose credit facet the catalog deliberately omits is HELD"
+  :file "src/shiharai/governor.cljc"
+  :find "(and (= :none (:taxlaw/coverage tax)) (some? (:taxlaw/out-of-scope tax)))"
+  :replace "(and (= :none (:taxlaw/coverage tax)) false)"}
+
+ {:id :out-of-scope-collapses-into-uncatalogued
+  :invariant "an omitted facet and an unread jurisdiction get different names"
+  :file "src/shiharai/governor.cljc"
+  :find "(nil? (:taxlaw/out-of-scope tax)))\n       (conj {:rule :unchecked-credit-jurisdiction"
+  :replace "(or true (nil? (:taxlaw/out-of-scope tax))))\n       (conj {:rule :unchecked-credit-jurisdiction"}
+
+ {:id :out-of-scope-refusal-loses-its-reason
+  :invariant "the US refusal carries WHY, not just a rule name"
+  :file "src/shiharai/governor.cljc"
+  :find "\" は kotoba.taxlaw が意図的に読んでいない: \"\n                           (:taxlaw/why tax)"
+  :replace "\" は kotoba.taxlaw が意図的に読んでいない\"\n                           \"\""}
+
+ {:id :eu-partial-format-passes
+  :invariant "a credit accepted on a self-declared partial format check escalates"
+  :file "src/shiharai/governor.cljc"
+  :find "      (some? gap)\n      (conj {:rule :registration-format-partially-checked"
+  :replace "      (and (some? gap) false)\n      (conj {:rule :registration-format-partially-checked"}
+
+ {:id :every-claim-escalates-on-format
+  :invariant "a jurisdiction declaring no format gap does not escalate"
+  :file "src/shiharai/jurisdiction.cljc"
+  :find "      (when (seq missing)"
+  :replace "      (when true"}
+
+ {:id :gap-reported-on-a-refusal
+  :invariant "a shortfall is only meaningful on an ACCEPTED claim"
+  :file "src/shiharai/jurisdiction.cljc"
+  :find "(true? (:taxlaw/supported? tax))"
+  :replace "(some? (:taxlaw/supported? tax))"}
+
+ {:id :gap-is-not-reported
+  :invariant "the verdict says what the format check did not look at"
+  :file "src/shiharai/governor.cljc"
+  :find "     :registration-gap (juris/registration-gap tax)"
+  :replace "     :registration-gap nil"}
+
+ {:id :gap-does-not-reach-the-surface
+  :invariant "the endpoint carries the shortfall beside the tax map"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "   :registration-gap (:registration-gap verdict)"
+  :replace "   :registration-gap nil"}
+
+ {:id :eu-refusal-names-the-japanese-register
+  :invariant "a non-JP registration number is not called a 適格請求書 one"
+  :file "src/shiharai/governor.cljc"
+  :find "(str (if (= [:jp] jurisdiction)"
+  :replace "(str (if (or true (= [:jp] jurisdiction))"}
+
+ ;; RETARGETED 2026-08-18 after it SURVIVED, and the reason is recorded here
+ ;; rather than the mutation being deleted. Its first form replaced
+ ;; `:retention/years years` with `(or years 7)` inside the :stated branch —
+ ;; where the preceding `(nil? years)` cond clause has already caught every
+ ;; nil, so `years` is non-nil by construction and the `or` was a SEMANTIC
+ ;; NO-OP. It survived because there was nothing to notice, which is a fact
+ ;; about the mutation and not about the suite.
+ ;;
+ ;; The invention it is named for is reachable one branch up: put a year count
+ ;; into the :deferred map, where the EU and the United States land and where
+ ;; no instrument states one. That is the actual failure — a caller reading
+ ;; "7" for a Directive that says each Member State shall determine the
+ ;; period.
+ {:id :retention-invents-seven-years
+  :invariant "no year count where the instrument states none"
+  :file "src/shiharai/jurisdiction.cljc"
+  :find "       :retention/provision (:rule/provision facet)\n       :retention/quote (:rule/quote facet)"
+  :replace "       :retention/years 7\n       :retention/provision (:rule/provision facet)\n       :retention/quote (:rule/quote facet)"}
+
+ {:id :retention-deferred-becomes-stated
+  :invariant "an instrument that states no number is not a :stated one"
+  :file "src/shiharai/jurisdiction.cljc"
+  :find "      (nil? years)\n      {:retention/coverage :deferred"
+  :replace "      (and (nil? years) false)\n      {:retention/coverage :deferred"}
+
+ {:id :retention-deferred-collapses-into-none
+  :invariant "read-and-deferred is not the same answer as never-read"
+  :file "src/shiharai/jurisdiction.cljc"
+  :find "      {:retention/coverage :deferred\n       :retention/jurisdiction j"
+  :replace "      {:retention/coverage :none\n       :retention/jurisdiction j"}
+
+ {:id :retention-hides-who-sets-the-period
+  :invariant "a deferred period names who does set it"
+  :file "src/shiharai/jurisdiction.cljc"
+  :find "       :retention/period-set-by (:rule/period-set-by facet)"
+  :replace "       :retention/period-set-by nil"}
+
+ {:id :retention-uncatalogued-becomes-deferred
+  :invariant "a jurisdiction nobody read is :none, not :deferred"
+  :file "src/shiharai/jurisdiction.cljc"
+  :find "      (cond-> {:retention/coverage :none"
+  :replace "      (cond-> {:retention/coverage :deferred"}
+
+ {:id :retention-drops-what-japans-number-depends-on
+  :invariant "7 years binds 青色申告法人 and the verdict says so"
+  :file "src/shiharai/jurisdiction.cljc"
+  :find "         (:rule/binds facet) (conj (:rule/binds facet))"
+  :replace "         false (conj (:rule/binds facet))"}
+
+ {:id :every-payable-gets-japans-retention
+  :invariant "retention is read for the payable's own jurisdiction"
+  :file "src/shiharai/governor.cljc"
+  :find "     :retention (juris/retention jurisdiction)"
+  :replace "     :retention (juris/retention [:jp])"}
+
+ {:id :retention-does-not-reach-the-verdict
+  :invariant "the verdict reports how long the invoice must be kept"
+  :file "src/shiharai/governor.cljc"
+  :find "              :retention (:retention a)"
+  :replace "              :retention nil"}
+
+ {:id :retention-does-not-reach-the-surface
+  :invariant "the endpoint reports retention too"
+  :file "src/shiharai/edge/endpoints.cljc"
+  :find "   :retention (:retention verdict)"
+  :replace "   :retention nil"}
+
+ ;; --- two decisions nothing targeted before 2026-08-18 ---------------------
+ ;; Found by reading governor.cljc for branches with no mutation against them,
+ ;; not by adding weight around rules already covered.
+
+ {:id :ap-account-ignored
+  :invariant "a payable's own 買掛金 control account is the one debited"
+  :file "src/shiharai/governor.cljc"
+  :find "(or (:payable/ap-account pay) default-ap-account)"
+  :replace "default-ap-account"}
+
+ {:id :due-date-escalation-fires-on-the-due-date
+  :invariant "paying on the day agreed is not something to escalate"
+  :file "src/shiharai/governor.cljc"
+  :find "        (and (int? n) (pos? n)))"
+  :replace "        (and (int? n) (>= n 0)))"}
+
+ {:id :due-date-comparison-is-reversed
+  :invariant "LATE escalates; early does not"
+  :file "src/shiharai/governor.cljc"
+  :find "            n (when (and d pd) (law/days-between d pd))]"
+  :replace "            n (when (and d pd) (law/days-between pd d))]"}
+]

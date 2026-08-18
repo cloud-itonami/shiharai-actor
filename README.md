@@ -71,13 +71,15 @@ configuration that turns it off.
 | library | what it answers here |
 |---|---|
 | [`kotoba-lang/governor`](https://github.com/kotoba-lang/governor) | the verdict itself. `gov/verdict` assembles it, `gov/missing-subject` / `no-actuation` / `unknown-scope` / `scope-owner-mismatch` are the four shared provenance rules, and `gov/conformance-failures` is asserted over **every verdict this actor can emit** |
-| [`kotoba-lang/taxlaw`](https://github.com/kotoba-lang/taxlaw) | 仕入税額控除 support and 電子帳簿保存法 第七条 preservation — **in three values**, all three of which this actor keeps |
+| [`kotoba-lang/taxlaw`](https://github.com/kotoba-lang/taxlaw) | 仕入税額控除 support, 電子帳簿保存法 第七条 preservation, and the retention period — **per facet and in three values**, all of which this actor keeps. `[:jp]`, `[:eu]` (Directive 2006/112/EC) and `[:us]` (26 CFR § 1.6001-1) |
 | [`kotoba-lang/banking`](https://github.com/kotoba-lang/banking) | IBAN (ISO 13616) mod-97 identification, and `balanced?` / `posting` for the double-entry the payment produces |
 | [`kotoba-lang/langgraph`](https://github.com/kotoba-lang/langgraph) | the StateGraph and the checkpoint that makes `:request-approval` a real interrupt |
 | [`kotoba-lang/langchain-store`](https://github.com/kotoba-lang/langchain-store) | the EDN-blob codec, identity schema and seq-keyed event streams under `DatomicStore` — the seam ~190 itonami actors were hand-rolling identically |
 
-**`deps.edn` contains zero `:local/root`.** Every dependency is a git
-coordinate, transitively: `langchain-store` pulls `langchain-clj`, which pulls
+**`deps.edn` contains zero `:local/root`.** Verified again on 2026-08-18 by
+walking the parsed EDN for the key: **the reader found 0, `grep -c` found 3**,
+all three inside the comment discussing the one this file no longer has.
+Every dependency is a git coordinate, transitively: `langchain-store` pulls `langchain-clj`, which pulls
 `kotoba-lang/json`, and none of the four carries a `:local/root`.
 
 That was checked by **reading each `deps.edn` as EDN**, not by grepping it.
@@ -94,7 +96,7 @@ gate ships.
 
 ## The rules
 
-### 24 HARD invariants — `:hold`, no approval route
+### 25 HARD invariants — `:hold`, no approval route
 
 Provenance (from `kotoba-lang/governor`): unregistered supplier · `:effect`
 other than `:propose` · unregistered payable · **a payable belonging to a
@@ -113,17 +115,33 @@ currency · an unbalanced posting · a posting that differs from the
 governor's own redraft.
 
 Tax (via `kotoba.taxlaw`): a credit claimed in an **uncatalogued**
-jurisdiction · a credit claimed without a valid 登録番号 · an electronic
-transaction preserved only on paper.
+jurisdiction · a credit claimed where the catalog **deliberately holds no
+rule**, with the reason attached · a credit claimed without a registration
+number valid for that jurisdiction's format · an electronic transaction
+preserved only on paper.
+
+The first two are equally hard and differently named. `:none` from
+`kotoba.taxlaw` has two causes and they send a reader to different places:
+nobody has read an invoice rule for this jurisdiction, or the facet was
+considered and left out because there is no such rule to read. The United
+States is the second — no federal VAT, therefore no federal analogue of
+適格請求書 — and telling an operator to go and read a law that does not exist
+is the same misattributed blame `store-unconfigured-response` refuses to
+commit one layer out.
 
 Statute: a payment term **beyond** 60 days · a payable that asserts the
 statute applies and does not carry the dates to check it.
 
-### 5 escalations — a human decides
+### 6 escalations — a human decides
 
 `:release-payment` (always) · an account under a scheme this repo has no
-validator for · a payment term at exactly 60 days · a payment scheduled after
-the payable's own due date · confidence below 0.6.
+validator for · **a registration number that passed a format check the
+catalog itself calls partial** · a payment term at exactly 60 days · a
+payment scheduled after the payable's own due date · confidence below 0.6.
+
+The new one has the same shape as the second: no validator, therefore a
+person. In the EU it fires on *every* accepted input-tax claim, and that is
+not noise — see below.
 
 ---
 
@@ -149,12 +167,156 @@ they do not get the same treatment:
 | | |
 |---|---|
 | the payable **claims** 仕入税額控除 in a jurisdiction nobody catalogued | **HOLD**. An affirmative claim needs support, and `:none` is not support |
+| the payable claims it where the catalog deliberately holds no rule | **HOLD**, equally hard, under its own name and carrying the catalog's stated reason |
+| the payable claims it and the number passes a check the catalog calls partial | **ESCALATE**. Not a pass — `:supported? true` in the EU means the first two characters look like an ISO 3166 prefix |
 | the payable does not say how the transaction happened | **not held**, but the verdict carries `:preservation {:taxlaw/coverage :not-declared}`. Nothing was claimed, so nothing was checked |
 
 The asymmetry is deliberate, and it is stated on the verdict rather than
-buried: `:tax`, `:preservation`, `:destination`, `:payment-terms`,
-`:outstanding` and `:escalations` ride along on every verdict, so **a green
-verdict that skipped a question shows the question**.
+buried: `:tax`, `:registration-gap`, `:retention`, `:preservation`,
+`:destination`, `:payment-terms`, `:outstanding` and `:escalations` ride
+along on every verdict, so **a green verdict that skipped a question shows
+the question**.
+
+## What this actor can say about a payable outside Japan
+
+`kotoba.taxlaw` moved to per-**facet** coverage and gained `[:eu]` and
+`[:us]`. Being in the catalog now says something was read about somewhere and
+says nothing about the facet you are asking after, which is the distinction
+`shiharai.jurisdiction` turns into sentences an AP operator can act on.
+
+### Adding two jurisdictions made nothing payable that was not payable before
+
+Both pins were loaded side by side and every `(jurisdiction,
+registration-number)` and `(jurisdiction, origin, preservation)` pair this
+actor can produce was compared. Three differences, one of them a value:
+
+| | old pin | new pin |
+|---|---|---|
+| `[:jp]` | | identical on every shared key; one new key, `:taxlaw/registration-format`, nil here |
+| `[:us]` | `:none` | still `:none` on both axes — every rule that gates on `:none` fires exactly as before. `:out-of-scope` and `:why` are added beside it |
+| `[:eu]` `credit-support` | `:none` | **`:checked`** — this one widens |
+
+The suite did not notice, **because no fixture was `[:eu]`**. That is the gap
+`test/shiharai/jurisdiction_test.clj` closes, and its first test compares a
+jurisdiction that was just added against one that will never exist:
+`[:atlantis]` was uncatalogued before the bump and is uncatalogued after it,
+so a US payable that behaves identically has not been widened by anything.
+
+### `[:eu]` — one thing is checkable, and the output must not sound like more
+
+Directive 2006/112/EC Article 226 is a closed list and item (3) is the
+supplier's VAT identification number, so the EU genuinely has an analogue of
+the 適格請求書 registration number. But Article 215 gives the **format** as an
+ISO 3166 alpha-2 prefix and nothing else — Greece may use `EL` — so the only
+checkable thing is the shape of the first two characters.
+
+**`XX1` passes.** So `:taxlaw/supported? true` in the EU means *nothing this
+catalog can check is wrong with this string*. It does not mean the prefix
+names a Member State, that the body has the right shape, or that a check
+digit was computed; the catalog says so itself in `:not-checked`.
+
+Reporting that as "the supplier's VAT number is valid" would be this actor's
+worst available sentence, because it is the one an approver would believe. So
+the verdict carries `:registration-gap` naming exactly what was not looked
+at, and the governor **escalates rather than scheduling**. An EU input-tax
+claim reaches a person — the same answer, for the same reason, a 全銀
+destination account already gets.
+
+### `[:us]` — there is no federal analogue, and that is the finding
+
+No federal VAT or GST, so no federal analogue of a qualified invoice; the
+consumption taxes that exist are State sales and use taxes, fifty-odd bodies
+of law the catalog has not read. A US payable claiming an input-tax credit is
+**HELD, exactly as hard as one in a jurisdiction nobody has ever
+catalogued**, and the graph writes no payment record. What changed is only
+the sentence attached to the refusal.
+
+### The electronic-record asymmetry — same facet key, opposite direction
+
+電子帳簿保存法 第七条 obliges the **holder** to preserve the electromagnetic
+record as such. Directive Articles 218 and 246 oblige the **Member State** to
+accept electronic form, and Article 247(2) hands the preservation obligation
+down. Both facets are called `:jurisdiction/electronic-transaction` and they
+do not say the same thing.
+
+So `record-preservation` answers `:none` for `[:eu]`, and **an EU electronic
+invoice kept on paper never comes back from this actor as preserved.** It
+comes back as not checked, naming Article 247(2). The identical
+origin/preservation pair in `[:jp]` is a HARD hold — the contrast is asserted
+in both directions, because a rule that only ever answers one way is not one
+anybody has measured.
+
+### Retention — `nil` is two different answers, and this actor separates them
+
+`kotoba.taxlaw/retention-years` is nil for `[:eu]`, for `[:us]` **and** for a
+jurisdiction nobody catalogued. Those are not the same nil, and a caller
+handed the bare nil is free to supply the seven years that appears in none of
+the instruments here.
+
+| | `retention` | why |
+|---|---|---|
+| `[:atlantis]` | `:none` | nobody read a retention rule. Missing data |
+| `[:eu]` | `:deferred`, `:period-set-by :member-state` | Article 247(1): *each Member State shall determine the period*. The instrument was read; the number lives one level down |
+| `[:us]` | `:deferred`, `:period-set-by :materiality` | 26 CFR § 1.6001-1(e) states a CONDITION where a number would go — *so long as the contents thereof may become material*. The widely repeated "seven years" appears nowhere in the regulation |
+| `[:jp]` | `:stated`, `:years 7` | 法人税法施行規則 第五十九条 — **with `:conditional-on`**, because it binds 青色申告法人, the period is 10 years where a loss is carried forward, and the 起算日 is two months after a fiscal-year end this repository does not hold |
+
+**This actor never answers 7 or 10 years for a jurisdiction whose instrument
+states none.** Inventing one would be the same failure as defaulting an
+unknown payable amount to zero, one axis over — and it is the failure the
+mutation `:retention-invents-seven-years` exists to catch.
+
+---
+
+### Three `kotoba.taxlaw` functions this actor does NOT call, and why
+
+The same pin that added `[:eu]` and `[:us]` added `book-search`,
+`electronic-transaction-search` and `consumption-tax-amount`. None is wired
+in here. Saying which and why is the answer, because "we did not get to it"
+and "it is not this actor's question" are different facts.
+
+**`consumption-tax-amount` — the issuer's question, and the inputs do not
+exist here.** 消費税法施行令 第七十条の十 computes the 消費税額等 to write
+**on** a 適格請求書 from per-rate subtotals, a method (税抜 / 税込) and a
+rounding policy. All three are choices the article hands the **issuer**, and
+the function refuses to default the last two precisely because picking one
+answers a question nobody asked — by ¥1 per rate, on every invoice, forever.
+This actor is the payer: it receives an invoice on which the supplier already
+made those choices. It is *relevant* — 仕入税額控除 is claimed against that
+figure, so a wrong one overstates the credit — but a payable here carries one
+`:payable/amount-minor` and **no tax breakdown at all**, so there is nothing
+to hand the function. Recomputing a supplier's figure from data this actor
+does not have would mean guessing their method and their rounding. Its home
+is `cloud-itonami/tehai`, which issues.
+
+**`book-search` — a property of the holder's books, not of any payable.**
+規則第五条第五項第一号ハ attaches to 法第八条第四項, the 過少申告加算税
+reduction, and `requires-book-search?` returns
+`:claiming-preferential-treatment` rather than `true` for exactly that
+reason: whether it bites turns on a decision the holder makes and the
+software does not observe. This actor has no 国税関係帳簿. It has payables,
+payments and an audit trail, and it goes out of its way not to own the
+client's chart of accounts — `shiwake` refuses to choose an account and takes
+a mapping instead. The books are the ledger actor's, and so is this question.
+
+**`electronic-transaction-search` — the closest of the three, and still not
+here.** 規則第四条第一項 imports a search requirement for the *same* 電子取引
+records 第七条 obliges a holder to preserve — and this actor already reads
+`:payable/origin` and `:payable/preservation` and holds on 第七条. So the
+subject matter overlaps. What does not overlap is the **subject**: every
+input the function takes (`:searchable-by`, `:range-search?`,
+`:can-produce-on-demand?`, `:base-period-sales-yen`,
+`:paper-output-organized?`) is a fact about the storage system and the
+holder, not about an invoice. This actor's store is an audit trail; it does
+not know where the client keeps the document. Answering it per payable would
+staple a deployment-wide fact to every one of them and imply it had been
+checked for each.
+
+There is a defensible design where it is asserted **once** per deployment and
+reported on every verdict beside `:preservation`. That is a decision with a
+shape, not an omission — and it is not one to make as a side effect of
+bumping a pin.
+
+---
 
 ### 3. A statute is not enforced from a URL
 
@@ -506,9 +668,30 @@ io.github.cognitect-labs  io.github.com-junkawasaki  io.github.kotoba-lang
 The iteration that added the second store backend and the surface took the
 suite from **68 tests / 373 assertions** to 130 / 792; the 仕訳 hand-off took
 it to 146 / 899; recording what the ledger did with the entry took it to
-**165 / 1116**.
+165 / 1116; adopting per-facet `kotoba.taxlaw` and answering for `[:eu]` and
+`[:us]` took it to **186 / 1259**.
 
-### The tests can fail — 92 mutations, 92 killed, 0 survived, 0 unmeasured
+```
+$ clojure -M:test          # before the pin bump
+Ran 165 tests containing 1116 assertions.
+0 failures, 0 errors.
+
+$ clojure -M:test          # after the pin bump, BEFORE any code changed
+Ran 165 tests containing 1116 assertions.
+0 failures, 0 errors.
+
+$ clojure -M:test          # after
+Ran 186 tests containing 1259 assertions.
+0 failures, 0 errors.
+```
+
+**The middle line is the finding, not the reassurance.** The pin bump changed
+one value this actor consumes — an EU input-tax claim stopped being held —
+and the suite reported the identical 165 / 1116 either side of it, because no
+fixture was `[:eu]`. A green suite across a behaviour change is a statement
+about the suite.
+
+### The tests can fail — 113 mutations, and two of the new ones survived
 
 A test that has never gone red is a test nobody has measured. `tools/mutate.cljs`
 applies one single-token mutation from `tools/mutations.edn`, runs the suite,
@@ -518,14 +701,55 @@ a comment produces a red suite that proves nothing.
 
 ```
 $ nbb tools/check-mutations.cljs
-SCANNED	92 mutations
+SCANNED	113 mutations
 all find strings occur exactly once
 
-$ nbb tools/mutate.cljs
-baseline: Ran 165 tests containing 1116 assertions. GREEN
+$ nbb tools/mutate.cljs <the 22 added or retargeted on 2026-08-18>
+baseline: Ran 186 tests containing 1259 assertions. GREEN
 ...
-=== 92 mutations, 92 killed, 0 survived, 0 unmeasured
+=== 22 mutations, 20 killed, 2 survived, 0 unmeasured
+  SURVIVOR: :gap-reported-on-a-refusal
+  SURVIVOR: :retention-invents-seven-years
 ```
+
+**Both survivors were real, and they were real in different ways.**
+
+`:gap-reported-on-a-refusal` loosened `registration-gap`'s `(true? …)` guard
+to `(some? …)`, so a shortfall would be reported beside a *refused* claim —
+and nothing noticed, because every assertion in the new suite was about an
+accepted one. Printing "here is what we did not check" next to a refusal
+reads as the reason for it, as though the claim would have passed had the
+check digit been computed, when in fact the prefix itself failed. Fixed by
+`a-refused-claim-reports-no-shortfall-because-it-has-already-refused`.
+
+`:retention-invents-seven-years` was **a semantic no-op**, and that is a fact
+about the mutation rather than about the suite. It replaced
+`:retention/years years` with `(or years 7)` inside the `:stated` branch —
+where the preceding `(nil? years)` cond clause has already caught every nil,
+so `years` is non-nil by construction. It was **retargeted, not deleted**, and
+the reason is recorded in `tools/mutations.edn` beside it: the invention it is
+named for is reachable one branch up, in the `:deferred` map where the EU and
+the United States land. In that position it reddens two tests.
+
+Deleting it would have cleaned the table and removed the only mutation
+guarding the invariant the whole `retention` function exists for. That is the
+move the harness exists to prevent.
+
+```
+$ nbb tools/mutate.cljs <the same 22, after the fix and the retarget>
+baseline: Ran 188 tests containing 1280 assertions. GREEN
+=== 22 mutations, 22 killed, 0 survived, 0 unmeasured
+```
+
+**What this table covers and what it does not.** The 22 mutations above are
+the ones added or retargeted for the non-JP work, and every one of them was
+run to a verdict. The other 91 are the pre-existing table; the full 113-run
+was **started and stopped at 25 of 113** (all 25 killed, 0 survived) because
+this workstation was at load 240 with three sibling agents running their own
+harnesses and each suite run was taking about two minutes. So: *the added
+mutations are measured, the pre-existing ones are measured only as far as 25,
+and the remaining 88 are unmeasured against this change.* They were all green
+before it.
 
 **`0 unmeasured` is a new column, and it is there because the harness scored
 57/57 once while measuring only 56.** `:stream-seq-advances`'s first form
@@ -639,6 +863,50 @@ thing reported have to be the same thing*, and a tally cannot tell you that.
 | `:handoff-batch-status-and-outcome-must-agree` | `:outcome` alone lets a 500 arrive labelled `:posted` | 1 |
 | `:handoff-missing-results-is-not-an-empty-batch` | "none answered" ≠ "zero submitted" | 1 |
 | `:handoff-reaches-nothing` | it records a value; it makes no call | 2 |
+
+The 22 added or retargeted on 2026-08-18, every one killed against the
+188-test suite.
+
+| mutation | invariant broken | tests reddened |
+|---|---|---|
+| `:unchecked-credit-jurisdiction` | `:none` is not a pass (uncatalogued branch) | 3 |
+| `:us-hold-is-dropped` | **a US payable must not become payable** | **6** |
+| `:out-of-scope-collapses-into-uncatalogued` | the two `:none` causes get different names | 1 |
+| `:out-of-scope-refusal-loses-its-reason` | the refusal carries WHY, not just a rule | 1 |
+| `:eu-partial-format-passes` | **a claim accepted on a partial format check escalates** | **5** |
+| `:every-claim-escalates-on-format` | a jurisdiction declaring no gap does not escalate | 1 |
+| `:gap-reported-on-a-refusal` | a shortfall qualifies a `true`, not a `false` | 1 — **survived the first run**, see above |
+| `:gap-is-not-reported` | the verdict says what was not looked at | 5 |
+| `:gap-does-not-reach-the-surface` | so does the endpoint | 1 |
+| `:eu-refusal-names-the-japanese-register` | a German supplier is not in 国税庁's register | 1 |
+| `:retention-invents-seven-years` | **no year count where the instrument states none** | 2 — **retargeted**, see above |
+| `:retention-deferred-becomes-stated` | an instrument stating no number is not `:stated` | 4 |
+| `:retention-deferred-collapses-into-none` | read-and-deferred ≠ never-read | 3 |
+| `:retention-hides-who-sets-the-period` | a deferred period names who sets it | 1 |
+| `:retention-uncatalogued-becomes-deferred` | and the converse | 2 |
+| `:retention-drops-what-japans-number-depends-on` | 7 years binds 青色申告法人 | 1 |
+| `:every-payable-gets-japans-retention` | retention is read for the payable's own jurisdiction | 2 |
+| `:retention-does-not-reach-the-verdict` | it is reported | 2 |
+| `:retention-does-not-reach-the-surface` | on the endpoint too | 1 |
+| `:ap-account-ignored` | **a payable's own 買掛金 account is the one debited** | 1 |
+| `:due-date-escalation-fires-on-the-due-date` | paying on the day agreed is not escalated | 1 |
+| `:due-date-comparison-is-reversed` | LATE escalates; early does not | **32** |
+
+The last three are not about jurisdictions. They came from reading
+`governor.cljc` for branches **no mutation in the table targeted**, rather
+than from adding weight around rules already covered:
+
+- **`:payable/ap-account` was read by `redraft-posting`, accepted by
+  `register-payable-core!`, and asserted nowhere.** Ignoring it substitutes
+  the `default-ap-account` constant — and the posting still BALANCES, the
+  payment is still approved, and the audit trail records a debit against a
+  liability the client never named. `kotoba-lang/shohyo` refuses to guess what
+  an account is precisely because a statement that guessed still balances.
+- **E4 was tested in one direction only.** A payment a month late escalated;
+  neither boundary was measured, and they fail opposite ways — widening sends
+  every on-time payment to a human and makes the approval queue useless,
+  narrowing lets a late payment schedule itself. The day before, the day
+  itself and the day after are now all asserted.
 
 `:scheduled-consumes-balance` reddening 22 tests is not padding: `:scheduled`
 ceasing to consume the balance is the single change that would let the same
@@ -769,8 +1037,29 @@ something else carries:
   invisible from this side, so "converted" is not "posted". Naming it
   because the whole point of the namespace is that a gap between a decision
   and an entry is silent.
-- **One statute, one jurisdiction.** 取適法 第三条 for JP, plus whatever
-  `kotoba.taxlaw` covers. Nothing here is tax or legal advice.
+- **One statute, three jurisdictions, and most of what they cover is
+  `:out-of-scope`.** 取適法 第三条 for JP, plus whatever `kotoba.taxlaw`
+  covers — which for `[:eu]` is one Directive read for three facets and for
+  `[:us]` is one regulation read for one. Nothing here is tax or legal
+  advice.
+- **`[:eu]` cannot be validated, only shaped.** Every accepted EU input-tax
+  claim escalates, because Article 215 gives an ISO 3166 alpha-2 prefix and
+  the body of the number is Member State law nobody here has read. That is a
+  correct refusal to overstate and it is also a real limit: an operator
+  paying many EU suppliers will approve each one by hand. Closing it needs a
+  Member State's format read into the catalog, or VIES, and VIES is a
+  network call this repository will not make.
+- **`retention` is reported and never enforced.** The verdict says whether
+  an instrument states a period and who sets it; it does not compute a
+  起算日, because that needs a fiscal-year end and a filing status this actor
+  does not hold. `kotoba.taxlaw/retention` takes both and would answer — the
+  gap is that nothing here supplies them.
+- **A payment date this actor cannot read does not escalate.** `E4` compares
+  the payment date with the payable's due date and stays silent when either
+  is unreadable. That is defensible — it is a business convention, not a
+  statute, so `shiharai.law`'s `:undeterminable` HOLD would be the wrong
+  shape — but the consequence is that a payment dated `"soon"` is late for
+  nobody. Asserted as current behaviour rather than left to be discovered.
 
 ## Test
 

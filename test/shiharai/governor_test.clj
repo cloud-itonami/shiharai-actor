@@ -3,6 +3,10 @@
   governor deliberately did not answer is on the verdict where a reader can
   see it."
   (:require [clojure.test :refer [deftest is testing]]
+            ;; Added 2026-08-18 for the two tests at the foot of this file:
+            ;; the account the governor CHOSE has to be the account the graph
+            ;; COMMITTED, and that link is only observable through the graph.
+            [shiharai.actor :as actor]
             [shiharai.fixtures :as f]
             [shiharai.governor :as governor]
             [shiharai.store :as store]))
@@ -431,3 +435,76 @@
       (is (not (:escalate? v)))
       (is (not (:ok? v)))
       (is (seq (:violations v))))))
+
+;; ---------------------------------------------------------------------------
+;; Two things nothing in this repository measured until 2026-08-18.
+;;
+;; Both were found by reading `governor.cljc` for decisions no mutation in
+;; `tools/mutations.edn` targeted, rather than by adding cases around rules
+;; that were already covered.
+;; ---------------------------------------------------------------------------
+
+(deftest a-payable-that-names-its-own-liability-account-is-posted-against-it
+  ;; `:payable/ap-account` was read by `redraft-posting`, accepted by
+  ;; `register-payable-core!`, and asserted NOWHERE. It is the worst shape of
+  ;; gap this repository has a name for: ignoring it substitutes the
+  ;; `default-ap-account` constant, the posting still BALANCES, the payment is
+  ;; approved, and the audit trail records a debit against a liability the
+  ;; client never named. `kotoba-lang/shohyo` refuses to guess what an account
+  ;; is precisely because a statement that guessed still balances.
+  (let [st (f/fresh-store)]
+    (store/register-payable! st (assoc (store/payable st "pbl-1")
+                                       :payable/ap-account "AP-DE"))
+    (let [v (check f/request (f/proposal) st)
+          debit (first (filter #(= :debit (:ledger/side %))
+                               (:ledger/entries (:posting v))))]
+      (is (:ok? v))
+      (is (= "AP-DE" (:ledger/account debit))
+          "the payable's own 買掛金 control account, not the constant")
+      (testing "and the constant is only a fallback, not the answer"
+        (is (not= governor/default-ap-account (:ledger/account debit))))))
+  (testing "a payable that names none falls back to the constant, and says which"
+    (let [v (check (f/proposal))
+          debit (first (filter #(= :debit (:ledger/side %))
+                               (:ledger/entries (:posting v))))]
+      (is (= governor/default-ap-account (:ledger/account debit)))))
+  (testing "the account the governor chose is the one committed to the ledger"
+    ;; The redraft is what `shiharai.actor`'s :commit node stores, so a wrong
+    ;; account here is a wrong account in the permanent record.
+    (let [st (f/fresh-store)]
+      (store/register-payable! st (assoc (store/payable st "pbl-1")
+                                         :payable/ap-account "AP-DE"))
+      (let [g (actor/build-graph {:store st})]
+        (actor/run-request! g {:supplier-id "s-1" :op :schedule-payment
+                               :payable "pbl-1" :payment-id "pay-ap"
+                               :from-account "FUND-EUR"
+                               :payment-date "2026-01-20"}
+                            {} "t-ap")
+        (is (= #{"AP-DE" "FUND-EUR"}
+               (set (map :ledger/account
+                         (:ledger/entries (first (store/postings st)))))))))))
+
+(deftest the-due-date-escalation-fires-after-the-due-date-and-not-on-it
+  ;; E4 was tested in one direction only — a payment a month late escalates.
+  ;; Neither boundary was measured, and they fail in opposite ways: widening
+  ;; sends every on-time payment to a human and makes the approval queue
+  ;; useless, narrowing lets a late payment schedule itself silently.
+  (let [esc (fn [d] (escalation-rules
+                     (check (f/proposal :payment (f/payment :payment/date d)))))]
+    (testing "the day before the due date"
+      (is (not (contains? (esc "2026-01-31") :payment-after-due-date))))
+    (testing "ON the due date — paying on the day agreed is not a thing to
+              escalate, and this is the assertion that says so"
+      (is (not (contains? (esc "2026-02-01") :payment-after-due-date))))
+    (testing "one day after"
+      (is (contains? (esc "2026-02-02") :payment-after-due-date))))
+  (testing "an unreadable payment date does NOT escalate, which is a limit
+            worth stating rather than a rule worth trusting: this is a
+            business convention and not a statute, so an undeterminable one
+            is silent here — unlike 取適法 第三条, which HOLDS when it applies
+            and cannot be evaluated"
+    (doseq [d [nil "not-a-date" "2026-02-30"]]
+      (is (not (contains? (escalation-rules
+                           (check (f/proposal :payment (f/payment :payment/date d))))
+                          :payment-after-due-date))
+          (pr-str d)))))

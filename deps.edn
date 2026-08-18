@@ -19,7 +19,7 @@
         ;; keeps all three rather than collapsing them to a boolean.
         io.github.kotoba-lang/taxlaw
         {:git/url "https://github.com/kotoba-lang/taxlaw.git"
-         :git/sha "718b09ea4fd608dc3a12d0baaa095588046a2e5c"}
+         :git/sha "d2663b54aad645244e61ae548054943b1229c1fc"}
 
         ;; IBAN (ISO 13616) mod-97 identification and double-entry
         ;; balanced-posting validation. The governor redrafts the posting a

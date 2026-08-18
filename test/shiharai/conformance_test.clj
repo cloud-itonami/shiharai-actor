@@ -28,6 +28,17 @@
     (store/register-payable! st (f' (store/payable st "pbl-2")))
     st))
 
+(defn- with-pbl-1
+  "The non-JP cases are built on `pbl-1` and NOT on `pbl-2`. `pbl-2`'s
+  supplier has a 全銀 destination and is a 中小受託事業者, so an
+  `:escalate/…` case built there would escalate whether or not the rule it
+  is named after fired — a green that demonstrates nothing. `pbl-1`'s
+  supplier has a mod-97-valid IBAN and is neither."
+  [f']
+  (let [st (f/fresh-store)]
+    (store/register-payable! st (f' (store/payable st "pbl-1")))
+    st))
+
 (def ^:private jp-payment
   (f/payment :payment/payable "pbl-2" :payment/amount-minor 500000
              :payment/currency "JPY" :payment/from-account "FUND-JPY"))
@@ -92,6 +103,21 @@
     :request {:supplier-id "s-2"}
     :proposal (f/proposal :payable "pbl-2" :payment jp-payment)
     :store #(with-payable (fn [p] (assoc p :payable/preservation :paper)))}
+   ;; A jurisdiction the catalog deliberately holds no invoice rule for. HARD,
+   ;; exactly as hard as one nobody catalogued — adding the United States must
+   ;; not have made a US payable payable.
+   {:name :hard/credit-out-of-scope
+    :request f/request :proposal (f/proposal)
+    :store #(with-pbl-1 (fn [p] (assoc p :payable/jurisdiction [:us]
+                                       :payable/claims-input-tax-credit? true
+                                       :payable/registration-number "12-3456789")))}
+   ;; An EU claim whose registration number satisfies the only format rule the
+   ;; Directive states — an ISO 3166 alpha-2 prefix. "XX1" satisfies it.
+   {:name :escalate/registration-format-partial
+    :request f/request :proposal (f/proposal)
+    :store #(with-pbl-1 (fn [p] (assoc p :payable/jurisdiction [:eu]
+                                       :payable/claims-input-tax-credit? true
+                                       :payable/registration-number "XX1")))}
    {:name :escalate/release
     :request f/request
     :proposal (f/proposal :op :release-payment :confidence 1.0)
@@ -151,10 +177,13 @@
   ;; disposition would pass while checking almost nothing — and the count
   ;; here is asserted, not assumed, so deleting cases reddens this test.
   (let [vs (map verdict-for cases)]
-    (is (= 21 (count cases)) "case count changed; update the floors deliberately")
+    ;; Raised from 21 / 14 / 6 on 2026-08-18 when the two non-JP cases landed.
+    ;; The test asks for this to be done deliberately, so: two cases added,
+    ;; one HARD and one escalating, and both floors moved by exactly one.
+    (is (= 23 (count cases)) "case count changed; update the floors deliberately")
     (is (>= (count (filter :ok? vs)) 1) "no clean case")
-    (is (>= (count (filter :hard? vs)) 14) "HARD rules under-covered")
-    (is (>= (count (filter :escalate? vs)) 6) "escalation under-covered")))
+    (is (>= (count (filter :hard? vs)) 15) "HARD rules under-covered")
+    (is (>= (count (filter :escalate? vs)) 7) "escalation under-covered")))
 
 (deftest every-named-case-reached-the-disposition-its-name-claims
   ;; "skipped" and "passed" must be distinguishable: a case named :hard/x that
