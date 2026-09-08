@@ -6,7 +6,12 @@
  ;; ships one repo's tree and no siblings (CLAUDE.md, fleet-ci section).
  ;; The suite in this repo is run from a directory with no siblings before
  ;; every release; that is the measurement, not the intention.
- :deps {;; The itonami actor pattern's governor layer, written once. The
+ :deps {
+        ;; kotoba.lang.text, not clojure.string. Pinned as an explicit floor:
+        ;; tools.deps takes the NEWEST sha it is shown, so without a floor here
+        ;; this repo silently rides whatever a sibling happens to name.
+        io.github.kotoba-lang/text {:git/sha "73bdb13ae7a3d004b44bca08be03a3191157a38f"}
+       ;; The itonami actor pattern's governor layer, written once. The
         ;; verdict map is NOT hand-rolled here — `gov/verdict` assembles it,
         ;; and `gov/conformance-failures` is asserted over every verdict this
         ;; actor can emit (see test/shiharai/conformance_test.clj).

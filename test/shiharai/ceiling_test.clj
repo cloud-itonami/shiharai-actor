@@ -24,7 +24,7 @@
   they actually read, because a scanner pointed at an empty directory
   reports the same clean result as a clean repository."
   (:require [clojure.java.io :as io]
-            [clojure.string :as str]
+            [kotoba.lang.text :as str]
             [clojure.test :refer [deftest is testing]])
   (:import (java.io PushbackReader StringReader)))
 
