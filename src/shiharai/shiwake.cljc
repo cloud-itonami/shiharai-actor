@@ -80,7 +80,7 @@
   silently discard it. The consequence is worth naming rather than hiding:
   **an entry cannot be traced back to the payment that produced it except
   through the payable it cites.**"
-  (:require [clojure.string :as str]))
+  (:require [kotoba.lang.text :as str]))
 
 (defn- minor-unit-amount?
   "A positive integer of the currency's minor unit — the same shape

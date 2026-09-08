@@ -49,7 +49,7 @@
   the payable says it arises from 製造委託等 AND the supplier is recorded as a
   中小受託事業者 — and `:not-declared` is neither a pass nor a refusal, exactly
   as `kotoba.taxlaw/record-preservation` treats an undeclared origin."
-  (:require [clojure.string :as str]))
+  (:require [kotoba.lang.text :as str]))
 
 ;; ---------------------------------------------------------------------------
 ;; Calendar — pure, portable, and it refuses rather than guesses

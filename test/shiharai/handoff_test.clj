@@ -17,7 +17,7 @@
   3. nothing unreadable is ever scored as a success;
   4. a batch whose results cannot be paired with its entries is refused
      rather than zipped."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [clojure.test :refer [deftest is testing]]
             [shiharai.actor :as actor]
             [shiharai.fixtures :as fx]

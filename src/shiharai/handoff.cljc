@@ -58,7 +58,7 @@
   because the ledger's parser drops everything but `:source-doc` and
   `:lines`, so an entry can only be traced back through the payable. The
   fact carries the payment id on THIS side, where nothing drops it."
-  (:require [clojure.string :as str]))
+  (:require [kotoba.lang.text :as str]))
 
 (def outcomes
   "Every value `:handoff/outcome` can take. Named as a set so the whole

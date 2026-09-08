@@ -6,7 +6,7 @@
   authorised, no entry is ever drafted for it, and both actors report a
   clean run. Nothing goes red. The books are simply short by one
   disbursement."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.lang.text] [clojure.test :refer [deftest is testing]]
             [shiharai.actor :as actor]
             [shiharai.fixtures :as fx]
             [shiharai.shiwake :as shiwake]
@@ -273,7 +273,7 @@
                             (mapcat rest)
                             (map #(if (sequential? %) (first %) %))
                             set)]
-          (is (= '#{clojure.string} required)
+          (is (= '#{kotoba.lang.text} required)
               (str "shiwake requires " (pr-str required)))))))
   (testing "the namespace exposes exactly two functions — there is no third
             that carries the request anywhere"
