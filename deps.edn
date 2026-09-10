@@ -14,7 +14,7 @@
        ;; The itonami actor pattern's governor layer, written once. The
         ;; verdict map is NOT hand-rolled here — `gov/verdict` assembles it,
         ;; and `gov/conformance-failures` is asserted over every verdict this
-        ;; actor can emit (see test/shiharai/conformance_test.clj).
+        ;; actor can emit (see test/shiharai/conformance_test.kotoba).
         io.github.kotoba-lang/governor
         {:git/url "https://github.com/kotoba-lang/governor.git"
          :git/sha "90a2944e617e58b9c90314b7e84b003ec3ea0c1f"}

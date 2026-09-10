@@ -33,7 +33,7 @@ the verdict must still SAY what was not checked — that is what `:tax`,
 `:preservation`, `:destination`, `:payment-terms` and `:escalations` are for.
 
 **Only enforce a statute whose text is in this repo.** 取適法 第三条 is in
-`src/shiharai/law.cljc` with its e-Gov revision id, both paragraphs verbatim,
+`src/shiharai/law.kotoba` with its e-Gov revision id, both paragraphs verbatim,
 and the API call that retrieved it. Do not add a rule grounded in a URL
 nobody opened, and do not widen an article's own scope: 第三条 reaches
 製造委託等 between a 委託事業者 and a 中小受託事業者, not invoices in general.
@@ -63,7 +63,7 @@ no approval route.
 
 `MemStore` ≡ `DatomicStore` — same protocol, same contract test; **write both
 sides of any store change**, and add its assertion to
-`test/shiharai/store_contract_test.clj` in the same commit. The contract test
+`test/shiharai/store_contract_test.kotoba` in the same commit. The contract test
 is not decoration here: the committed-payment set is what `:duplicate-payment`
 is enforced against, so a backend that answered it differently would not make
 the hold fail, it would leave the hold with nothing to be true about.
@@ -106,7 +106,7 @@ that may already be scheduled.
 
 ## The ceiling is a test, not a sentence
 
-`test/shiharai/ceiling_test.clj` reads every `ns` form under `src/` and
+`test/shiharai/ceiling_test.kotoba` reads every `ns` form under `src/` and
 compares its requires against an allow-list, then scans for host escapes that
 need no dependency. **Adding a dependency means adding it to
 `permitted-requires` with the sentence saying why it cannot reach a network.**
@@ -127,9 +127,9 @@ gate ships.
 
 ## Test — including that the tests can fail
 
-    clojure -M:test && clojure -M:lint && nbb tools/mutate.cljs
+    clojure -M:test && clojure -M:lint && nbb tools/mutate.kotoba
 
-`tools/mutate.cljs` must report **0 survived**. A survivor is a finding about
+`tools/mutate.kotoba` must report **0 survived**. A survivor is a finding about
 the suite, not about the mutation: fix the code or the test, do not delete
 the mutation. Two survivors on the first run were real defects and both were
 repaired (see README).

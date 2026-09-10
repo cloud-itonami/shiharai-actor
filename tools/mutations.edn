@@ -1,132 +1,132 @@
 ;; One mutation per invariant. `:find` must occur EXACTLY ONCE in `:file` —
-;; `tools/mutate.cljs` refuses otherwise, because a mutation that landed in a
+;; `tools/mutate.kotoba` refuses otherwise, because a mutation that landed in a
 ;; comment or in a second call site produces a red suite that proves nothing.
 ;;
 ;; Read the pair before trusting a red: the thing broken and the thing
 ;; reported must be the same thing.
 [{:id :no-actuation
   :invariant "the advisor may only propose"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(gov/no-actuation {:effect effect}"
   :replace "(gov/no-actuation {:effect :propose}"}
 
  {:id :no-supplier
   :invariant "the requesting supplier must be registered"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(gov/missing-subject sup {:rule :no-supplier"
   :replace "(gov/missing-subject (or sup {}) {:rule :no-supplier"}
 
  {:id :unknown-payable
   :invariant "a cited payable must be registered"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(gov/unknown-scope pay {:applies? (boolean payable)"
   :replace "(gov/unknown-scope pay {:applies? false"}
 
  {:id :payable-wrong-supplier
   :invariant "a payable must belong to the requesting supplier"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(gov/scope-owner-mismatch pay {:supplier-id supplier-id}"
   :replace "(gov/scope-owner-mismatch nil {:supplier-id supplier-id}"}
 
  {:id :unknown-payable-amount
   :invariant "an unknown amount is neither 0 nor unlimited"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(and pay (not (int? (:payable/amount-minor pay))))"
   :replace "(and pay false)"}
 
  {:id :outstanding-defaults-to-zero
   :invariant "the store refuses to turn an unknown amount into a number"
-  :file "src/shiharai/store.cljc"
+  :file "src/shiharai/store.kotoba"
   :find "(when (int? amount)\n       (- amount (committed-minor"
   :replace "(when true\n       (- (or amount 0) (committed-minor"}
 
  {:id :invalid-amount
   :invariant "a payment is a positive integer of minor units"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(and payment (not (and (int? amount-minor) (pos? amount-minor))))"
   :replace "(and payment false)"}
 
  {:id :duplicate-payment
   :invariant "a payable already covered may not be paid again"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(and (int? out) (<= out 0))"
   :replace "(and (int? out) (< out -1))"}
 
  {:id :scheduled-consumes-balance
   :invariant "a :scheduled payment consumes the balance, not only :authorised"
-  :file "src/shiharai/store.cljc"
+  :file "src/shiharai/store.kotoba"
   :find "#{:scheduled :authorised})"
   :replace "#{:authorised})"}
 
  {:id :overpayment
   :invariant "a payment may not exceed the outstanding balance"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(> amount-minor out)"
   :replace "(> amount-minor (* 2 out))"}
 
  {:id :payment-id-reused
   :invariant "a schedule may not reuse a committed payment id"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(and (= :schedule-payment op) existing)"
   :replace "(and (= :schedule-payment op) false)"}
 
  {:id :release-of-unscheduled
   :invariant "a release must cite a scheduled payment"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(and releasing? (not= :scheduled (:payment/status existing)))"
   :replace "(and releasing? false)"}
 
  {:id :release-alters-payment
   :invariant "a release may not change what the human is approving"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(and releasing? (= :scheduled (:payment/status existing))"
   :replace "(and releasing? false"}
 
  {:id :currency-mismatch
   :invariant "no cross-currency payment without an FX rate nobody has"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(and pay payment (some? currency) (not= currency (:payable/currency pay)))"
   :replace "(and pay payment (some? currency) false)"}
 
  {:id :no-destination-account
   :invariant "a payment needs a destination"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(= :none (:destination/coverage dest))"
   :replace "(= :nope (:destination/coverage dest))"}
 
  {:id :invalid-iban
   :invariant "an IBAN that fails ISO 13616 mod-97 is refused"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(false? (:destination/valid? dest))"
   :replace "(nil? (:destination/valid? dest))"}
 
  {:id :iban-checksum
   :invariant "kotoba.banking's mod-97 is the thing being consulted"
-  :file "src/shiharai/store.cljc"
+  :file "src/shiharai/store.kotoba"
   :find "(boolean (bank/iban-valid? (:account/id account)))"
   :replace "true"}
 
  {:id :unknown-funding-account
   :invariant "the funding account must be registered"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(and payment from-account (nil? fund))"
   :replace "(and payment from-account false)"}
 
  {:id :funding-currency
   :invariant "the funding account's currency must match the payment"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(and fund (some? currency) (not= currency (:account/currency fund)))"
   :replace "(and fund (some? currency) false)"}
 
  {:id :unbalanced-posting
   :invariant "the double-entry posting must balance"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(and posting (not (bank/balanced? (:ledger/entries posting))))"
   :replace "(and posting false)"}
 
  {:id :posting-mismatch
   :invariant "the advisor's posting is compared with the governor's redraft"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(not= (:ledger/entries posting) (:ledger/entries redrafted))"
   :replace "(not= 1 1)"}
 
@@ -137,73 +137,73 @@
  ;; needs one mutation per branch: this one, and :us-hold-is-dropped below.
  {:id :unchecked-credit-jurisdiction
   :invariant "taxlaw's :none is not a pass (uncatalogued branch)"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "       (and (= :none (:taxlaw/coverage tax)) (nil? (:taxlaw/out-of-scope tax)))"
   :replace "       (and (= :nope (:taxlaw/coverage tax)) (nil? (:taxlaw/out-of-scope tax)))"}
 
  {:id :credit-unsupported
   :invariant "a claimed credit needs a valid 登録番号"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(false? (:taxlaw/supported? tax))"
   :replace "(nil? (:taxlaw/supported? tax))"}
 
  {:id :electronic-preservation
   :invariant "電子帳簿保存法 第七条, via taxlaw"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(false? (:taxlaw/preserved? pres))"
   :replace "(nil? (:taxlaw/preserved? pres))"}
 
  {:id :statutory-term-exceeded
   :invariant "取適法 第三条, in the unambiguous direction"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(law/exceeded? terms)"
   :replace "false"}
 
  {:id :statutory-sixty-day-limit
   :invariant "the 60-day limit itself"
-  :file "src/shiharai/law.cljc"
+  :file "src/shiharai/law.kotoba"
   :find ":law/term (cond (> n limit) :exceeded"
   :replace ":law/term (cond (> n (inc limit)) :exceeded"}
 
  {:id :statutory-boundary
   :invariant "exactly 60 days goes to a human instead of passing"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(law/boundary? terms)"
   :replace "false"}
 
  {:id :statutory-undeterminable
   :invariant "in scope and unevaluable is not compliant"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(= :undeterminable (:law/coverage terms))"
   :replace "(= :nope (:law/coverage terms))"}
 
  {:id :calendar-rejects-impossible-days
   :invariant "2026-02-30 is not a date"
-  :file "src/shiharai/law.cljc"
+  :file "src/shiharai/law.kotoba"
   :find "(when (= [y m d] (epoch-day->civil z)) z)"
   :replace "z"}
 
  {:id :release-escalates
   :invariant ":release-payment always reaches a human"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(def escalating-ops #{:release-payment})"
   :replace "(def escalating-ops #{})"}
 
  {:id :unverified-destination-escalates
   :invariant "an unvalidatable account scheme is a human decision"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(= :unverified (:destination/coverage dest))"
   :replace "(= :nope (:destination/coverage dest))"}
 
  {:id :confidence-floor
   :invariant "a proposal below the floor escalates"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "\n  0.6)"
   :replace "\n  0.0)"}
 
  {:id :router-checks-hard-first
   :invariant "the graph's router tests :hard? before :escalate?"
-  :file "src/shiharai/actor.cljc"
+  :file "src/shiharai/actor.kotoba"
   :find "(cond hard? :hold\n        escalate? :request-approval"
   :replace "(cond escalate? :request-approval\n        hard? :hold"}
 
@@ -213,25 +213,25 @@
 
  {:id :payment-identity-in-the-durable-store
   :invariant "re-committing a payment id UPSERTS rather than forking"
-  :file "src/shiharai/store.cljc"
+  :file "src/shiharai/store.kotoba"
   :find "[:supplier/id :account/id :payable/id :payment/id"
   :replace "[:supplier/id :account/id :payable/id"}
 
  {:id :payable-identity-in-the-durable-store
   :invariant "re-registering a payable id replaces rather than forks it"
-  :file "src/shiharai/store.cljc"
+  :file "src/shiharai/store.kotoba"
   :find ":payable/id :payment/id\n                       :posting/seq"
   :replace ":payment/id\n                       :posting/seq"}
 
  {:id :journal-is-replayed-on-open
   :invariant "a store opened over a journal rebuilds from it"
-  :file "src/shiharai/store.cljc"
+  :file "src/shiharai/store.kotoba"
   :find "([persist] (->DatomicStore (d/create-conn schema persist))))"
   :replace "([persist] (->DatomicStore (d/create-conn schema)))) ;; persist ignored"}
 
  {:id :journal-is-appended-to
   :invariant "a write reaches the journal, not only the connection"
-  :file "src/shiharai/store.cljc"
+  :file "src/shiharai/store.kotoba"
   :find "{:append (fn [event] (swap! a conj event) event)"
   :replace "{:append (fn [event] event)"}
 
@@ -246,19 +246,19 @@
  ;; sequence at 0, so every append upserts over the last one.
  {:id :stream-seq-advances
   :invariant "an append goes to the NEXT sequence number, not over the last"
-  :file "src/shiharai/store.cljc"
+  :file "src/shiharai/store.kotoba"
   :find "  (count (d/q [:find '?e :where ['?e seq-attr '_]] (d/db conn))))"
   :replace "  (min 0 (count (d/q [:find '?e :where ['?e seq-attr '_]] (d/db conn)))))"}
 
  {:id :collection-reads-are-ordered
   :invariant "a multi-value read has a defined order, not the backend's accident"
-  :file "src/shiharai/store.cljc"
+  :file "src/shiharai/store.kotoba"
   :find "(accounts [_] (vec (sort-by :account/id (vals (:accounts @a)))))"
   :replace "(accounts [_] (vec (reverse (sort-by :account/id (vals (:accounts @a))))))"}
 
  {:id :a-hold-is-attributed
   :invariant "a refusal records whose it was and what it was about"
-  :file "src/shiharai/actor.cljc"
+  :file "src/shiharai/actor.kotoba"
   :find "{:disposition :hold\n                                           :supplier-id (:supplier-id request)"
   :replace "{:disposition :hold\n                                           :supplier-id nil"}
 
@@ -268,97 +268,97 @@
 
  {:id :edge-absent-allowlist-is-503
   :invariant "an absent allow-list refuses; it does not open the endpoint"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "    (nil? allowlist)\n    {:status 503"
   :replace "    (= ::never allowlist)\n    {:status 503"}
 
  {:id :edge-unlisted-caller-is-403
   :invariant "a verified caller still has to be on the allow-list"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "(nil? (supplier-for allowlist caller-did))"
   :replace "(= ::never (supplier-for allowlist caller-did))"}
 
  {:id :edge-body-may-not-name-a-supplier
   :invariant "the supplier is derived from the caller, never claimed"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "#{:supplier-id :supplier :payable/supplier})"
   :replace "#{})"}
 
  {:id :edge-op-is-a-constant
   :invariant "no request body can reach the release path"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "                                         :op :schedule-payment\n"
   :replace "                                         :op (or (:op body) :schedule-payment)\n"}
 
  {:id :edge-escalation-is-not-a-success
   :invariant "a payment a human must decide is not reported as scheduled"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "              :request-approval\n              {:status 202"
   :replace "              :request-approval\n              {:status 200"}
 
  {:id :edge-payable-is-not-overwritten
   :invariant "an endpoint does not move a payable's amount under a scheduled payment"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "          (some? (store/payable store payable-id))"
   :replace "          (some? nil)"}
 
  {:id :edge-supplier-must-be-registered
   :invariant "a payable is not registered against a supplier nobody registered"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "          (nil? (store/supplier store supplier-id))"
   :replace "          (= ::never (store/supplier store supplier-id))"}
 
  {:id :edge-amount-must-be-a-positive-integer
   :invariant "an amount that is not one is refused, not coerced"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "          (and (some? amount) (not (and (int? amount) (pos? amount))))"
   :replace "          (and (some? amount) false)"}
 
  {:id :edge-unknown-outstanding-is-not-zero
   :invariant "nil crossing the response boundary is :unknown, not 0"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "  (let [n (store/outstanding store payable-id)]\n    (if (int? n) n :unknown)))"
   :replace "  (let [n (store/outstanding store payable-id)]\n    (if (int? n) n 0)))"}
 
  {:id :edge-unknown-verdict-is-not-a-pass
   :invariant "a payment nobody asked about is 404 :unknown, not an empty 200"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "              {:status 404\n               :body {:ok false\n                      :verdict :unknown"
   :replace "              {:status 200\n               :body {:ok true\n                      :verdict :unknown"}
 
  {:id :edge-malformed-id-is-not-a-miss
   :invariant "a malformed payment id is 400, not 404"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "  (when (and (string? x) (seq (.trim x))) x))"
   :replace "  (and (string? x) (seq (.trim x)) x))"}
 
  {:id :edge-verdict-is-scoped-to-the-caller
   :invariant "another supplier's payment id is not readable"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "                                     (entries-for-supplier store supplier-id)))]"
   :replace "                                     (store/ledger store)))]"}
 
  {:id :edge-ledger-is-scoped-to-the-caller
   :invariant "the ledger endpoint shows this supplier's entries and no others"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "            mine (filterv #(= supplier-id (:supplier-id %)) all)]"
   :replace "            mine (vec all)]"}
 
  {:id :edge-reports-what-it-could-not-attribute
   :invariant "a filtered view says when it is incomplete"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find ":unattributed (count (filterv #(nil? (:supplier-id %)) all))"
   :replace ":unattributed 0"}
 
  {:id :edge-store-mode-rejects-a-typo
   :invariant "a misspelt deployment variable selects no mode at all"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "    \"journalled\" :journalled\n"
   :replace "    \"journalled\" :journalled\n    \"journaled\" :journalled\n"}
 
  {:id :edge-journalled-is-not-called-durable
   :invariant "this repo does not vouch for a host it cannot see"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "    :journalled :delegated"
   :replace "    :journalled :durable"}
 
@@ -368,7 +368,7 @@
 
  {:id :ceiling-permits-only-known-dependencies
   :invariant "a dependency that could reach a host fails the build"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "  (:require [shiharai.actor :as actor]"
   :replace "  (:require [clojure.java.io]\n            [shiharai.actor :as actor]"}
 
@@ -381,7 +381,7 @@
 
  {:id :shiwake-unauthorised-is-its-own-status
   :invariant "a payment that was not authorised is a named refusal"
-  :file "src/shiharai/shiwake.cljc"
+  :file "src/shiharai/shiwake.kotoba"
   :find "      (not= :commit disposition)"
   :replace "      (= :never-a-disposition disposition)"}
 
@@ -393,97 +393,97 @@
  ;; that can be widened wrongly.
  {:id :shiwake-only-an-authorised-payment-posts
   :invariant "a scheduled payment is a commitment, not a settlement"
-  :file "src/shiharai/shiwake.cljc"
+  :file "src/shiharai/shiwake.kotoba"
   :find "  #{:authorised})"
   :replace "  #{:authorised :scheduled})"}
 
  {:id :shiwake-scheduled-has-its-own-name
   :invariant "`wait for approval` is a different instruction from `look at this`"
-  :file "src/shiharai/shiwake.cljc"
+  :file "src/shiharai/shiwake.kotoba"
   :find "      (= :scheduled status)"
   :replace "      (= :scheduled :never-this-status)"}
 
  {:id :shiwake-unknown-status-is-not-approval-pending
   :invariant "an unreadable status is not called `awaiting approval`"
-  :file "src/shiharai/shiwake.cljc"
+  :file "src/shiharai/shiwake.kotoba"
   :find "      {:shiwake/status :unknown-payment-status\n"
   :replace "      {:shiwake/status :not-released\n"}
 
  {:id :shiwake-no-suspense-account
   :invariant "an unmapped supplier does not fall back to a suspense account"
-  :file "src/shiharai/shiwake.cljc"
+  :file "src/shiharai/shiwake.kotoba"
   :find "            liability (get-in mapping [:suppliers supplier-id])"
   :replace "            liability (or (get-in mapping [:suppliers supplier-id]) \"仮払金\")"}
 
  {:id :shiwake-half-a-mapping-is-no-mapping
   :invariant "an entry missing one line balances by having lost it"
-  :file "src/shiharai/shiwake.cljc"
+  :file "src/shiharai/shiwake.kotoba"
   :find "          (or (absent? liability) (absent? cash))"
   :replace "          (and (absent? liability) (absent? cash))"}
 
  {:id :shiwake-amount-is-a-positive-integer-of-minor-units
   :invariant "the ledger's parser takes any number?, so this one does not"
-  :file "src/shiharai/shiwake.cljc"
+  :file "src/shiharai/shiwake.kotoba"
   :find "  (and (int? x) (pos? x)))"
   :replace "  (number? x))"}
 
  {:id :shiwake-currency-must-be-declared
   :invariant "an amount with no unit is not an amount"
-  :file "src/shiharai/shiwake.cljc"
+  :file "src/shiharai/shiwake.kotoba"
   :find "              (absent? currency)"
   :replace "              false"}
 
  {:id :shiwake-a-document-must-be-cited
   :invariant "an entry citing nothing is a transaction nobody can trace"
-  :file "src/shiharai/shiwake.cljc"
+  :file "src/shiharai/shiwake.kotoba"
   :find "              (absent? payable))"
   :replace "              (false? payable))"}
 
  {:id :shiwake-the-payment-discharges-a-liability
   :invariant "Dr the liability, Cr the cash — not two credits, not an expense"
-  :file "src/shiharai/shiwake.cljc"
+  :file "src/shiharai/shiwake.kotoba"
   :find "            :lines [{:side :dr :account liability"
   :replace "            :lines [{:side :cr :account liability"}
 
  {:id :shiwake-every-line-carries-its-currency
   :invariant "the ledger groups by currency before comparing"
-  :file "src/shiharai/shiwake.cljc"
+  :file "src/shiharai/shiwake.kotoba"
   :find "{:side :cr :account cash      :amount amount-minor :currency currency}"
   :replace "{:side :cr :account cash      :amount amount-minor}"}
 
  {:id :shiwake-the-payable-is-the-source-document
   :invariant "the invoice is cited, not the payment that settled it"
-  :file "src/shiharai/shiwake.cljc"
+  :file "src/shiharai/shiwake.kotoba"
   :find "            :source-doc payable"
   :replace "            :source-doc (:payment/id pmt)"}
 
  {:id :shiwake-request-carries-only-what-the-ledger-reads
   :invariant "a field that endpoint drops is not smuggled into the body"
-  :file "src/shiharai/shiwake.cljc"
+  :file "src/shiharai/shiwake.kotoba"
   :find "           {:op :draft-entry\n"
   :replace "           {:op :draft-entry\n            :payment-id (:payment/id pmt)\n"}
 
  {:id :shiwake-batch-keeps-what-it-could-not-convert
   :invariant "a batch that filtered would report a clean run"
-  :file "src/shiharai/shiwake.cljc"
+  :file "src/shiharai/shiwake.kotoba"
   :find "     :skipped (vec (remove #(= :ok (:shiwake/status %)) rs))}))"
   :replace "     :skipped []}))"}
 
  {:id :shiwake-batch-ok-is-only-the-ok
   :invariant "a refusal does not travel in the :ok half"
-  :file "src/shiharai/shiwake.cljc"
+  :file "src/shiharai/shiwake.kotoba"
   :find "    {:ok (vec (filter #(= :ok (:shiwake/status %)) rs))"
   :replace "    {:ok (vec rs)"}
 
  {:id :shiwake-a-refusal-carries-the-record-it-refused
   :invariant "a refusal nobody can attribute is a refusal nobody can act on"
-  :file "src/shiharai/shiwake.cljc"
+  :file "src/shiharai/shiwake.kotoba"
   :find "(assoc (entry-request % mapping) :shiwake/record %)"
   :replace "(entry-request % mapping)"}
 
  {:id :shiwake-reaches-nothing
   :invariant "the hand-off produces a value and makes no call"
-  :file "src/shiharai/shiwake.cljc"
+  :file "src/shiharai/shiwake.kotoba"
   :find "  (:require [clojure.string :as str]))"
   :replace "  (:require [clojure.java.io]\n            [clojure.string :as str]))"}
 
@@ -493,109 +493,109 @@
 
  {:id :handoff-good-outcome-recorded
   :invariant "a posted entry is recorded as posted, not lost"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find "(not (true? (:ok body))) :unreadable"
   :replace "(not (false? (:ok body))) :unreadable"}
 
  {:id :handoff-duplicate-is-not-posted
   :invariant "a duplicate is its own outcome; one wrote, one confirmed"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find "(true? (:duplicate? body)) :duplicate"
   :replace "(true? (:duplicate? body)) :posted"}
 
  {:id :handoff-silent-200-is-not-a-post
   :invariant "a 200 that does not say whether it duplicated is unreadable"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find "(false? (:duplicate? body)) :posted"
   :replace ":else :posted"}
 
  {:id :handoff-unknown-status-is-not-a-success
   :invariant "a status nobody here knows never becomes a success"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find "      503 :unavailable\n      :unreadable)))"
   :replace "      503 :unavailable\n      :posted)))"}
 
  {:id :handoff-deployment-refusals-stay-three
   :invariant "400, 403 and 503 send a reader to three different places"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find "      403 :not-permitted\n      503 :unavailable\n"
   :replace "      403 :rejected\n      503 :rejected\n"}
 
  {:id :handoff-unreadable-carries-the-reply
   :invariant "an unreadable reply keeps enough of itself to be diagnosed"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find "(= :unreadable outcome) (assoc :handoff/response response\n                                   :handoff/raw-status status)"
   :replace "(= :unreadable outcome) (assoc :handoff/raw-status status)"}
 
  {:id :handoff-fact-names-the-payable
   :invariant "the fact joins back to the payable the entry cites"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find "{:handoff/payable (get-in converted [:shiwake/request :source-doc])"
   :replace "{:handoff/payable (get-in converted [:shiwake/request :not-a-key])"}
 
  {:id :handoff-fact-names-the-payment
   :invariant "the payment id the entry body cannot carry is kept here"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find "   :handoff/payment-id (:shiwake/payment-id converted)"
   :replace "   :handoff/payment-id (:shiwake/no-such-key converted)"}
 
  {:id :handoff-fact-names-the-supplier
   :invariant "the supplier the actor's own ledger stamps is stamped here too"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find "   :handoff/supplier-id (get-in converted [:shiwake/record :supplier-id])"
   :replace "   :handoff/supplier-id (get-in converted [:shiwake/record :not-a-key])"}
 
  {:id :handoff-posting-key-always-present
   :invariant "the ledger's posting id is reported even when there is none"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find ":handoff/posting (when (map? body) (:posting body))}"
   :replace ":handoff/no-posting (when (map? body) (:posting body))}"}
 
  {:id :handoff-unsubmitted-is-not-scored
   :invariant "a reply is never attributed to an entry nobody sent"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find "      (not= :ok (:shiwake/status converted))\n      (not-submitted converted response"
   :replace "      (and false (:shiwake/status converted))\n      (not-submitted converted response"}
 
  {:id :handoff-unsubmitted-is-not-scored-in-a-batch
   :invariant "a batch result is never attributed to an entry nobody sent"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find "      (or (not= :ok (:shiwake/status converted)) (absent? payable))"
   :replace "      (or (and false (:shiwake/status converted)) (absent? payable))"}
 
  {:id :handoff-length-mismatch-refused
   :invariant "a batch whose counts differ is refused, not zipped"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find "      (not= (count converted) (count results))"
   :replace "      (and false (count results))"}
 
  {:id :handoff-refusal-is-itself-a-fact
   :invariant "a refused batch still yields one fact to append"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find ":handoff/facts [f]"
   :replace ":handoff/facts []"}
 
  {:id :handoff-misattribution-refused
   :invariant "a result citing another document is not attributed here"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find "(and (some? echoed) (not= echoed payable))"
   :replace "(and false (not= echoed payable))"}
 
  {:id :handoff-batch-status-and-outcome-must-agree
   :invariant "a batch result's status and the ledger's own label must agree"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find "(if (and permitted (contains? permitted outcome))"
   :replace "(if (or permitted (contains? permitted outcome))"}
 
  {:id :handoff-missing-results-is-not-an-empty-batch
   :invariant "a reply with no :results is unreadable, not zero entries"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find "(not (sequential? results))"
   :replace "(and false results)"}
 
  {:id :handoff-reaches-nothing
   :invariant "recording an outcome produces a value and makes no call"
-  :file "src/shiharai/handoff.cljc"
+  :file "src/shiharai/handoff.kotoba"
   :find "  (:require [clojure.string :as str]))"
   :replace "  (:require [clojure.java.io]\n            [clojure.string :as str]))"}
 
@@ -607,55 +607,55 @@
 
  {:id :us-hold-is-dropped
   :invariant "a payable whose credit facet the catalog deliberately omits is HELD"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(and (= :none (:taxlaw/coverage tax)) (some? (:taxlaw/out-of-scope tax)))"
   :replace "(and (= :none (:taxlaw/coverage tax)) false)"}
 
  {:id :out-of-scope-collapses-into-uncatalogued
   :invariant "an omitted facet and an unread jurisdiction get different names"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(nil? (:taxlaw/out-of-scope tax)))\n       (conj {:rule :unchecked-credit-jurisdiction"
   :replace "(or true (nil? (:taxlaw/out-of-scope tax))))\n       (conj {:rule :unchecked-credit-jurisdiction"}
 
  {:id :out-of-scope-refusal-loses-its-reason
   :invariant "the US refusal carries WHY, not just a rule name"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "\" は kotoba.taxlaw が意図的に読んでいない: \"\n                           (:taxlaw/why tax)"
   :replace "\" は kotoba.taxlaw が意図的に読んでいない\"\n                           \"\""}
 
  {:id :eu-partial-format-passes
   :invariant "a credit accepted on a self-declared partial format check escalates"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "      (some? gap)\n      (conj {:rule :registration-format-partially-checked"
   :replace "      (and (some? gap) false)\n      (conj {:rule :registration-format-partially-checked"}
 
  {:id :every-claim-escalates-on-format
   :invariant "a jurisdiction declaring no format gap does not escalate"
-  :file "src/shiharai/jurisdiction.cljc"
+  :file "src/shiharai/jurisdiction.kotoba"
   :find "      (when (seq missing)"
   :replace "      (when true"}
 
  {:id :gap-reported-on-a-refusal
   :invariant "a shortfall is only meaningful on an ACCEPTED claim"
-  :file "src/shiharai/jurisdiction.cljc"
+  :file "src/shiharai/jurisdiction.kotoba"
   :find "(true? (:taxlaw/supported? tax))"
   :replace "(some? (:taxlaw/supported? tax))"}
 
  {:id :gap-is-not-reported
   :invariant "the verdict says what the format check did not look at"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "     :registration-gap (juris/registration-gap tax)"
   :replace "     :registration-gap nil"}
 
  {:id :gap-does-not-reach-the-surface
   :invariant "the endpoint carries the shortfall beside the tax map"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "   :registration-gap (:registration-gap verdict)"
   :replace "   :registration-gap nil"}
 
  {:id :eu-refusal-names-the-japanese-register
   :invariant "a non-JP registration number is not called a 適格請求書 one"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(str (if (= [:jp] jurisdiction)"
   :replace "(str (if (or true (= [:jp] jurisdiction))"}
 
@@ -674,55 +674,55 @@
  ;; period.
  {:id :retention-invents-seven-years
   :invariant "no year count where the instrument states none"
-  :file "src/shiharai/jurisdiction.cljc"
+  :file "src/shiharai/jurisdiction.kotoba"
   :find "       :retention/provision (:rule/provision facet)\n       :retention/quote (:rule/quote facet)"
   :replace "       :retention/years 7\n       :retention/provision (:rule/provision facet)\n       :retention/quote (:rule/quote facet)"}
 
  {:id :retention-deferred-becomes-stated
   :invariant "an instrument that states no number is not a :stated one"
-  :file "src/shiharai/jurisdiction.cljc"
+  :file "src/shiharai/jurisdiction.kotoba"
   :find "      (nil? years)\n      {:retention/coverage :deferred"
   :replace "      (and (nil? years) false)\n      {:retention/coverage :deferred"}
 
  {:id :retention-deferred-collapses-into-none
   :invariant "read-and-deferred is not the same answer as never-read"
-  :file "src/shiharai/jurisdiction.cljc"
+  :file "src/shiharai/jurisdiction.kotoba"
   :find "      {:retention/coverage :deferred\n       :retention/jurisdiction j"
   :replace "      {:retention/coverage :none\n       :retention/jurisdiction j"}
 
  {:id :retention-hides-who-sets-the-period
   :invariant "a deferred period names who does set it"
-  :file "src/shiharai/jurisdiction.cljc"
+  :file "src/shiharai/jurisdiction.kotoba"
   :find "       :retention/period-set-by (:rule/period-set-by facet)"
   :replace "       :retention/period-set-by nil"}
 
  {:id :retention-uncatalogued-becomes-deferred
   :invariant "a jurisdiction nobody read is :none, not :deferred"
-  :file "src/shiharai/jurisdiction.cljc"
+  :file "src/shiharai/jurisdiction.kotoba"
   :find "      (cond-> {:retention/coverage :none"
   :replace "      (cond-> {:retention/coverage :deferred"}
 
  {:id :retention-drops-what-japans-number-depends-on
   :invariant "7 years binds 青色申告法人 and the verdict says so"
-  :file "src/shiharai/jurisdiction.cljc"
+  :file "src/shiharai/jurisdiction.kotoba"
   :find "         (:rule/binds facet) (conj (:rule/binds facet))"
   :replace "         false (conj (:rule/binds facet))"}
 
  {:id :every-payable-gets-japans-retention
   :invariant "retention is read for the payable's own jurisdiction"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "     :retention (juris/retention jurisdiction)"
   :replace "     :retention (juris/retention [:jp])"}
 
  {:id :retention-does-not-reach-the-verdict
   :invariant "the verdict reports how long the invoice must be kept"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "              :retention (:retention a)"
   :replace "              :retention nil"}
 
  {:id :retention-does-not-reach-the-surface
   :invariant "the endpoint reports retention too"
-  :file "src/shiharai/edge/endpoints.cljc"
+  :file "src/shiharai/edge/endpoints.kotoba"
   :find "   :retention (:retention verdict)"
   :replace "   :retention nil"}
 
@@ -732,19 +732,19 @@
 
  {:id :ap-account-ignored
   :invariant "a payable's own 買掛金 control account is the one debited"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "(or (:payable/ap-account pay) default-ap-account)"
   :replace "default-ap-account"}
 
  {:id :due-date-escalation-fires-on-the-due-date
   :invariant "paying on the day agreed is not something to escalate"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "        (and (int? n) (pos? n)))"
   :replace "        (and (int? n) (>= n 0)))"}
 
  {:id :due-date-comparison-is-reversed
   :invariant "LATE escalates; early does not"
-  :file "src/shiharai/governor.cljc"
+  :file "src/shiharai/governor.kotoba"
   :find "            n (when (and d pd) (law/days-between d pd))]"
   :replace "            n (when (and d pd) (law/days-between pd d))]"}
 ]
