@@ -39,7 +39,7 @@ Concretely, and checkably:
 
 | | |
 |---|---|
-| network calls | none, and this is now a **test** rather than a sentence — `test/shiharai/ceiling_test.clj` reads every `ns` form under `src/` and compares its requires against an allow-list, then scans for the host escapes that need no dependency (`js/fetch`, `slurp`, …). Both halves assert a floor on how much they read, because a scanner pointed at nothing reports the same clean result as a clean repository |
+| network calls | none, and this is now a **test** rather than a sentence — `test/shiharai/ceiling_test.kotoba` reads every `ns` form under `src/` and compares its requires against an allow-list, then scans for the host escapes that need no dependency (`js/fetch`, `slurp`, …). Both halves assert a floor on how much they read, because a scanner pointed at nothing reports the same clean result as a clean repository |
 | credentials, keys, tokens | none. The HTTP surface takes an **already-verified** caller DID; shipping a verifier would mean shipping a key |
 | bank API client | none. `kotoba.banking` is a dependency for **IBAN validation and double-entry arithmetic**; `kotoba.banking.api`, which builds Berlin Group payment-initiation requests, is deliberately **not** required, and is not on the allow-list the ceiling test enforces. The two names are one character apart, so adding it would not look like a change of policy in a diff — it would look like a typo |
 | the strongest thing `:commit` writes | a map with `:payment/status :authorised` |
@@ -50,7 +50,7 @@ Concretely, and checkably:
 
 > An earlier version of this table claimed `grep -r "http\|fetch\|slurp" src/`
 > finds nothing. Run it and it finds one line: the e-Gov URL that 取適法 第三条
-> was retrieved from, in `src/shiharai/law.cljc`. That is a citation and not a
+> was retrieved from, in `src/shiharai/law.kotoba`. That is a citation and not a
 > call, and it was always harmless — but a check whose stated form does not
 > actually pass is a check nobody runs. The suite now names that one hit, so a
 > second one fails the build instead of quietly joining a claim that was
@@ -197,7 +197,7 @@ actor can produce was compared. Three differences, one of them a value:
 | `[:eu]` `credit-support` | `:none` | **`:checked`** — this one widens |
 
 The suite did not notice, **because no fixture was `[:eu]`**. That is the gap
-`test/shiharai/jurisdiction_test.clj` closes, and its first test compares a
+`test/shiharai/jurisdiction_test.kotoba` closes, and its first test compares a
 jurisdiction that was just added against one that will never exist:
 `[:atlantis]` was uncatalogued before the bump and is uncatalogued after it,
 so a US payable that behaves identically has not been widened by anything.
@@ -321,7 +321,7 @@ bumping a pin.
 ### 3. A statute is not enforced from a URL
 
 The one statutory payment-term rule here is 取適法（中小受託取引適正化法）
-**第三条**, and its text is in `src/shiharai/law.cljc` because it was
+**第三条**, and its text is in `src/shiharai/law.kotoba` because it was
 retrieved and read:
 
 ```
@@ -395,7 +395,7 @@ evicted is still a journal. The edge reports `:persistence :delegated` for
 that mode and never the word *durable*, because vouching for a host this repo
 cannot see is not something it is in a position to do.
 
-`test/shiharai/store_contract_test.clj` runs **every assertion against both
+`test/shiharai/store_contract_test.kotoba` runs **every assertion against both
 backends**, and the one it exists for is this: commit a payment, throw the
 store away, open another one over the same backing, and the duplicate is
 still refused —
@@ -416,7 +416,7 @@ crossing from before to after is serialised bytes.
 
 ## The surface
 
-Four functions in `src/shiharai/edge/endpoints.cljc`, portable `.cljc`, plain
+Four functions in `src/shiharai/edge/endpoints.kotoba`, portable `.cljc`, plain
 data in and `{:status :body}` out. No framework, no router, no host: whoever
 mounts them owns the transport.
 
@@ -469,7 +469,7 @@ to tell.
 
 **A payment that was authorised and never became a journal entry is money
 nobody's books show.** Deciding is not bookkeeping, and until
-`src/shiharai/shiwake.cljc` this repository stopped at the decision: it could
+`src/shiharai/shiwake.kotoba` this repository stopped at the decision: it could
 say a disbursement was approved and had no way to say so to the ledger that
 has to carry it. `cloud-itonami-isco-4311` owns that ledger.
 `cloud-itonami/keihi` landed the same seam on the expense-claim side; this is
@@ -693,18 +693,18 @@ about the suite.
 
 ### The tests can fail — 113 mutations, and two of the new ones survived
 
-A test that has never gone red is a test nobody has measured. `tools/mutate.cljs`
+A test that has never gone red is a test nobody has measured. `tools/mutate.kotoba`
 applies one single-token mutation from `tools/mutations.edn`, runs the suite,
 records which tests reddened, and restores the file. It refuses a `:find`
 string that does not occur **exactly once**, because a mutation that lands in
 a comment produces a red suite that proves nothing.
 
 ```
-$ nbb tools/check-mutations.cljs
+$ nbb tools/check-mutations.kotoba
 SCANNED	113 mutations
 all find strings occur exactly once
 
-$ nbb tools/mutate.cljs <the 22 added or retargeted on 2026-08-18>
+$ nbb tools/mutate.kotoba <the 22 added or retargeted on 2026-08-18>
 baseline: Ran 186 tests containing 1259 assertions. GREEN
 ...
 === 22 mutations, 20 killed, 2 survived, 0 unmeasured
@@ -736,7 +736,7 @@ guarding the invariant the whole `retention` function exists for. That is the
 move the harness exists to prevent.
 
 ```
-$ nbb tools/mutate.cljs <the same 22, after the fix and the retarget>
+$ nbb tools/mutate.kotoba <the same 22, after the fix and the retarget>
 baseline: Ran 188 tests containing 1280 assertions. GREEN
 === 22 mutations, 22 killed, 0 survived, 0 unmeasured
 ```
@@ -1063,9 +1063,9 @@ something else carries:
 
 ## Test
 
-    clojure -M:test && clojure -M:lint && nbb tools/mutate.cljs
+    clojure -M:test && clojure -M:lint && nbb tools/mutate.kotoba
 
-`nbb tools/check-mutations.cljs` is the pre-flight: it verifies every `:find`
+`nbb tools/check-mutations.kotoba` is the pre-flight: it verifies every `:find`
 occurs exactly once before the harness spends half an hour discovering that
 one of them does not.
 
