@@ -654,11 +654,11 @@ satisfied one:
 
 ```
 $ git clone …/shiharai-actor.git /tmp/shiharai-fresh && cd /tmp/shiharai-fresh
-$ CLJ_CACHE=…/cache GITLIBS=…/gitlibs clojure -M:test
+$ CLJ_CACHE=…/cache GITLIBS=…/gitlibs kbb -M:test
 Ran 165 tests containing 1116 assertions.
 0 failures, 0 errors.
 
-$ CLJ_CACHE=…/cache GITLIBS=…/gitlibs clojure -M:lint
+$ CLJ_CACHE=…/cache GITLIBS=…/gitlibs kbb -M:lint
 linting took 673ms, errors: 0, warnings: 0
 
 $ ls …/gitlibs/libs
@@ -672,15 +672,15 @@ it to 146 / 899; recording what the ledger did with the entry took it to
 `[:us]` took it to **186 / 1259**.
 
 ```
-$ clojure -M:test          # before the pin bump
+$ kbb -M:test          # before the pin bump
 Ran 165 tests containing 1116 assertions.
 0 failures, 0 errors.
 
-$ clojure -M:test          # after the pin bump, BEFORE any code changed
+$ kbb -M:test          # after the pin bump, BEFORE any code changed
 Ran 165 tests containing 1116 assertions.
 0 failures, 0 errors.
 
-$ clojure -M:test          # after
+$ kbb -M:test          # after
 Ran 186 tests containing 1259 assertions.
 0 failures, 0 errors.
 ```
@@ -1063,7 +1063,7 @@ something else carries:
 
 ## Test
 
-    clojure -M:test && clojure -M:lint && nbb tools/mutate.kotoba
+    kbb -M:test && kbb -M:lint && nbb tools/mutate.kotoba
 
 `nbb tools/check-mutations.kotoba` is the pre-flight: it verifies every `:find`
 occurs exactly once before the harness spends half an hour discovering that

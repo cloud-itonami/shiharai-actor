@@ -127,7 +127,7 @@ gate ships.
 
 ## Test — including that the tests can fail
 
-    clojure -M:test && clojure -M:lint && nbb tools/mutate.kotoba
+    kbb -M:test && kbb -M:lint && nbb tools/mutate.kotoba
 
 `tools/mutate.kotoba` must report **0 survived**. A survivor is a finding about
 the suite, not about the mutation: fix the code or the test, do not delete
