@@ -1,4 +1,4 @@
-# CLAUDE.md — cloud-itonami/shiharai-actor 支払
+# AGENTS.md — cloud-itonami/shiharai-actor 支払
 
 Not to be confused with `cloud-itonami/shiharai`, which is
 `com-etzhayyim-app-shiharai`: a TypeScript/Svelte appview of payment recipes.

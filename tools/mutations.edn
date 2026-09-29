@@ -242,7 +242,7 @@
  ;; code was non-zero. Zero tests had reddened. A mutation that breaks the
  ;; reader proves the reader works, not that the invariant is measured —
  ;; exactly the "wrongly-broken red looks like a successful demonstration"
- ;; failure CLAUDE.md names. The form below is balanced and pins the
+ ;; failure AGENTS.md names. The form below is balanced and pins the
  ;; sequence at 0, so every append upserts over the last one.
  {:id :stream-seq-advances
   :invariant "an append goes to the NEXT sequence number, not over the last"

@@ -1,6 +1,6 @@
 (ns shiharai.actor
   "ShiharaiActor — the 支払 accounts-payable actor as a
-  `langgraph.graph/state-graph` (ADR-2607011000 / CLAUDE.md Actors section).
+  `langgraph.graph/state-graph` (ADR-2607011000 / AGENTS.md Actors section).
   One graph run = one payment request.
 
   ```text

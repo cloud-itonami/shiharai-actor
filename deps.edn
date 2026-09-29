@@ -3,7 +3,7 @@
  ;; ZERO `:local/root`. Every dependency below is a git coordinate, so this
  ;; repo resolves from a clone with no sibling checkouts on disk — which is
  ;; also the only way a murakumo fleet gate can build it, since the fleet
- ;; ships one repo's tree and no siblings (CLAUDE.md, fleet-ci section).
+ ;; ships one repo's tree and no siblings (AGENTS.md, fleet-ci section).
  ;; The suite in this repo is run from a directory with no siblings before
  ;; every release; that is the measurement, not the intention.
  :deps {

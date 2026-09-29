@@ -2,7 +2,7 @@
   "SSoT for the 支払 (shiharai) accounts-payable actor. `Store` is a protocol
   injected into the `shiharai.actor` StateGraph; `MemStore` is the default,
   deterministic, zero-dependency backend (itonami actor pattern,
-  ADR-2607011000 / CLAUDE.md Actors section). Modelled on
+  ADR-2607011000 / AGENTS.md Actors section). Modelled on
   `cloud-itonami/tehai`'s `tehai.store` — tehai drafts the invoices, this
   actor pays them.
 
