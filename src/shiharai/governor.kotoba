@@ -1,6 +1,6 @@
 (ns shiharai.governor
   "ShiharaiGovernor — the independent safety layer for the 支払 (shiharai)
-  accounts-payable actor (itonami actor pattern, ADR-2607011000 / CLAUDE.md
+  accounts-payable actor (itonami actor pattern, ADR-2607011000 / AGENTS.md
   Actors section). Sibling of `cloud-itonami/tehai`'s governor, which gates
   the money coming IN; this one gates the money going OUT, which is the side
   where a mistake is unrecoverable.
@@ -380,7 +380,7 @@
        ;; Both rules are about the posting the ADVISOR supplied. The
        ;; governor's own redraft is balanced by construction — a debit and a
        ;; credit of the same amount — so a rule guarding its balance could
-       ;; never fire, and a check that cannot fail is theatre (CLAUDE.md:
+       ;; never fire, and a check that cannot fail is theatre (AGENTS.md:
        ;; 「落ちない gate は劇場」). The mutation harness found exactly that
        ;; and this is the repair. What the redraft's balance IS good for is
        ;; an assertion in the suite, where it belongs.

@@ -1,7 +1,7 @@
 (ns shiharai.ceiling-test
   "The ceiling, as a check rather than a claim.
 
-  README and CLAUDE.md both assert that nothing in this repository can move
+  README and AGENTS.md both assert that nothing in this repository can move
   money: no network call, no credential, no bank client, and specifically
   not `kotoba.banking.api`'s payment-initiation request builder. Until this
   file, the evidence offered for that was a `grep -r \"http|fetch|slurp\"`
