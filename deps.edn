@@ -10,21 +10,26 @@
         ;; kotoba.lang.text, not clojure.string. Pinned as an explicit floor:
         ;; tools.deps takes the NEWEST sha it is shown, so without a floor here
         ;; this repo silently rides whatever a sibling happens to name.
-        io.github.kotoba-lang/text {:git/sha "73bdb13ae7a3d004b44bca08be03a3191157a38f"}
+        io.github.kotoba-lang/text
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "7e1dbe0aece831138e6106c59d2b26375d0f60c4"
+         :deps/root "lib/kotoba.text"}
        ;; The itonami actor pattern's governor layer, written once. The
         ;; verdict map is NOT hand-rolled here — `gov/verdict` assembles it,
         ;; and `gov/conformance-failures` is asserted over every verdict this
         ;; actor can emit (see test/shiharai/conformance_test.kotoba).
         io.github.kotoba-lang/governor
-        {:git/url "https://github.com/kotoba-lang/governor.git"
-         :git/sha "90a2944e617e58b9c90314b7e84b003ec3ea0c1f"}
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "7e1dbe0aece831138e6106c59d2b26375d0f60c4"
+         :deps/root "lib/kotoba.governor"}
 
         ;; What a tax record must carry, by jurisdiction. Answers in THREE
         ;; values (`:none` / `:not-declared` / `:checked`), and this actor
         ;; keeps all three rather than collapsing them to a boolean.
         io.github.kotoba-lang/taxlaw
-        {:git/url "https://github.com/kotoba-lang/taxlaw.git"
-         :git/sha "d2663b54aad645244e61ae548054943b1229c1fc"}
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "7e1dbe0aece831138e6106c59d2b26375d0f60c4"
+         :deps/root "lib/kotoba.taxlaw"}
 
         ;; IBAN (ISO 13616) mod-97 identification and double-entry
         ;; balanced-posting validation. The governor redrafts the posting a
@@ -41,7 +46,9 @@
         ;; StateGraph + checkpointing, so `:release-payment` interrupts
         ;; before a human resumes the thread.
         io.github.kotoba-lang/langgraph
-        {:git/sha "5b4e5e70837b849b14b6a5800894e3be202ad5fa"}
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "7e1dbe0aece831138e6106c59d2b26375d0f60c4"
+         :deps/root "lib/kotoba.langgraph"}
 
         ;; The shared `langchain.db` store seam (EDN-blob codec, identity
         ;; schema, seq-keyed event streams) behind `DatomicStore`
@@ -52,8 +59,9 @@
         ;; io.github.com-junkawasaki/langchain-clj, is a git coordinate
         ;; too. The whole chain therefore resolves in a bare clone.
         io.github.kotoba-lang/langchain-store
-        {:git/url "https://github.com/kotoba-lang/langchain-store.git"
-         :git/sha "b986669f72276568c97e1fa5b331a5ff3017bf69"}}
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "7e1dbe0aece831138e6106c59d2b26375d0f60c4"
+         :deps/root "lib/kotoba.langchainStore"}}
 
  :aliases
  {:test {:extra-paths ["test"]
