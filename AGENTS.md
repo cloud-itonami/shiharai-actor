@@ -6,8 +6,8 @@ That repo is a surface; this one is the governed decision layer. Do not merge
 them, and do not add a UI here.
 
 Accounts-payable actor. itonami pattern: advisor ⊣ independent governor ⊣
-append-only ledger. Verdict assembly is `kotoba-lang/governor`, IBAN and
-double-entry are `kotoba-lang/banking`, tax records are `kotoba-lang/taxlaw`.
+append-only ledger. Verdict assembly is `kotoba-lang/governor` (now `lib/kotoba.governor` in `kotoba-lang/kotoba`; the old repository is retired), IBAN and
+double-entry are `kotoba-lang/banking` (now `lib/kotoba.banking` in `kotoba-lang/kotoba`; the old repository is retired), tax records are `kotoba-lang/taxlaw` (now `lib/kotoba.taxlaw` in `kotoba-lang/kotoba`; the old repository is retired).
 This repo is the governed shell.
 
 ## Rules that are not negotiable
